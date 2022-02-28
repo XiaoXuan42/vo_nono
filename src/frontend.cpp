@@ -4,6 +4,8 @@
 #include <opencv2/calib3d.hpp>
 #include <vector>
 
+#include "vo_nono/point.h"
+
 namespace vo_nono {
 namespace {
 inline cv::Mat pt2_to_homogeneous_mat(const cv::Point2f &pt) {
@@ -104,52 +106,6 @@ double Frontend::assess_essential_mat(
     return score;
 }
 
-void Frontend::get_image(const cv::Mat &image, vo_time_t t) {
-    if (m_state == State::Start) {
-        m_prev_frame = Frame(image);
-        m_state = State::Initializing;
-    } else if (m_state == State::Initializing) {
-        assert(!m_prev_frame.m_image.empty());
-        initialize(image);
-    } else if (m_state == State::Tracking) {
-        assert(false);
-    } else {
-        assert(false);
-    }
-}
-
-void Frontend::initialize(const cv::Mat &image) {
-    m_cur_frame = Frame(image);
-
-    detect_and_compute(m_prev_frame.m_image, m_prev_frame.kpts,
-                       m_prev_frame.descriptor);
-    detect_and_compute(image, m_cur_frame.kpts, m_cur_frame.descriptor);
-    std::vector<cv::DMatch> matches =
-            match_descriptor(m_prev_frame.descriptor, m_cur_frame.descriptor);
-
-    std::vector<cv::Point2f> matched_pt1, matched_pt2;
-    for (auto &match : matches) {
-        matched_pt1.push_back(m_prev_frame.kpts[match.queryIdx].pt);
-        matched_pt2.push_back(m_cur_frame.kpts[match.trainIdx].pt);
-    }
-
-    // todo: less than 8 matched points?
-    // todo: normalize scale?
-    // todo: filter inliners
-    cv::Mat Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
-                                       m_camera.get_intrinsic_mat());
-    cv::Mat R, t;
-    cv::recoverPose(Ess, matched_pt1, matched_pt2, R, t);
-
-    // triangulate points
-    cv::Mat tri_res;
-    cv::Mat proj_mat1 = get_proj_mat(cv::Mat::eye(3, 3, CV_32F ),
-                                     cv::Mat::zeros(3, 1, CV_32F));
-    cv::Mat proj_mat2 = get_proj_mat(R, t);
-    cv::triangulatePoints(proj_mat1, proj_mat2, matched_pt1, matched_pt2,
-                          tri_res);
-}
-
 cv::Mat Frontend::get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t) {
     cv::Mat proj = cv::Mat::zeros(3, 4, CV_32F);
     proj.rowRange(0, 3).colRange(0, 3) = Rcw;
@@ -158,4 +114,88 @@ cv::Mat Frontend::get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t) {
     return proj;
 }
 
+void Frontend::get_image(const cv::Mat &image, vo_time_t t) {
+    if (m_state == State::Start) {
+        assert(!m_keyframe);
+        cv::Mat dscpts;
+        std::vector<cv::KeyPoint> kpts;
+        detect_and_compute(image, kpts, dscpts);
+        m_keyframe =
+                std::make_shared<Frame>(Frame::create_frame(dscpts, kpts, t));
+        m_keyframe->set_Rcw(cv::Mat::eye(3, 3, CV_32F));
+        m_keyframe->set_Tcw(cv::Mat::zeros(3, 1, CV_32F));
+
+        m_state = State::Initializing;
+    } else if (m_state == State::Initializing) {
+        assert(m_keyframe);
+        initialize(image, t);
+
+        m_state = State::Tracking;
+    } else if (m_state == State::Tracking) {
+        assert(m_keyframe);
+        tracking(image);
+    } else {
+        unimplemented();
+    }
+}
+
+void Frontend::initialize(const cv::Mat &image, vo_time_t time) {
+    std::vector<cv::KeyPoint> kpts;
+    cv::Mat dscpts;
+    detect_and_compute(image, kpts, dscpts);
+    std::vector<cv::DMatch> matches =
+            match_descriptor(m_keyframe->get_dscpt_array(), dscpts);
+
+    const std::vector<cv::KeyPoint> &prev_kpts = m_keyframe->get_kpts();
+    std::vector<cv::Point2f> matched_pt1, matched_pt2;
+    for (auto &match : matches) {
+        matched_pt1.push_back(prev_kpts[match.queryIdx].pt);
+        matched_pt2.push_back(kpts[match.trainIdx].pt);
+    }
+
+    // todo: less than 8 matched points?
+    // todo: normalize scale?
+    // todo: filter outliers?
+    cv::Mat Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
+                                       m_camera.get_intrinsic_mat());
+    cv::Mat Rcw, t;
+    cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, t);
+    m_cur_frame = Frame::create_frame(dscpts, kpts, time);
+
+    // triangulate points
+    cv::Mat tri_res;
+    cv::Mat proj_mat1 =
+            get_proj_mat(m_keyframe->get_Rcw(), m_keyframe->get_Tcw());
+    cv::Mat proj_mat2 = get_proj_mat(Rcw, t);
+    cv::triangulatePoints(proj_mat1, proj_mat2, matched_pt1, matched_pt2,
+                          tri_res);
+
+    _finish_tracking(tri_res, matches);
+}
+
+void Frontend::tracking(const cv::Mat &image) {}
+
+void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
+                                const std::vector<cv::DMatch> &matches) {
+    assert(new_tri_res.cols == matches.size());
+    std::vector<vo_uptr<MapPoint>> new_points;
+    for (size_t i = 0; i < matches.size(); ++i) {
+        cv::Mat cur_point = new_tri_res.col((int) i);
+        if (!float_eq_zero(cur_point.at<float>(3))) {
+            // not infinite point
+            cur_point /= cur_point.at<float>(3);
+            float x = cur_point.at<float>(0);
+            float y = cur_point.at<float>(1);
+            float z = cur_point.at<float>(2);
+            vo_uptr<MapPoint> cur_map_pt = std::make_unique<MapPoint>(
+                    MapPoint::create_map_point(x, y, z));
+            m_keyframe->set_pt(matches[i].queryIdx, cur_map_pt->get_id(), x, y,
+                               z);
+            m_cur_frame->set_pt(matches[i].trainIdx, cur_map_pt->get_id(), x, y,
+                                z);
+            new_points.push_back(std::move(cur_map_pt));
+        }
+    }
+    insert_map_points(new_points);
+}
 }// namespace vo_nono

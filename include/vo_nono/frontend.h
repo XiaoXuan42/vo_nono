@@ -7,6 +7,7 @@
 
 #include "vo_nono/camera.h"
 #include "vo_nono/frame.h"
+#include "vo_nono/map.h"
 #include "vo_nono/types.h"
 
 namespace vo_nono {
@@ -42,14 +43,21 @@ public:
           m_camera(std::move(camera)) {}
 
 private:
-    void initialize(const cv::Mat &image);
+    void initialize(const cv::Mat &image, vo_time_t time);
+    void tracking(const cv::Mat &image);
     cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
+    void _finish_tracking(const cv::Mat &new_tri_res, const std::vector<cv::DMatch> &matches);
+    void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
+        if (m_map) { m_map->insert_map_points(points); }
+    }
 
 private:
     Camera m_camera;
-    Frame m_prev_frame;
-    Frame m_cur_frame;
     State m_state;
+
+    vo_ptr<Frame> m_keyframe;
+    vo_ptr<Frame> m_cur_frame;
+    vo_ptr<Map> m_map;
 };
 }// namespace vo_nono
 
