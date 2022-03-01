@@ -11,6 +11,10 @@
 #include "vo_nono/types.h"
 
 namespace vo_nono {
+struct FrontendConfig {
+    Camera camera;
+};
+
 class Frontend {
 public:
     enum class State : int {
@@ -38,20 +42,22 @@ public:
 
     [[nodiscard]] State get_state() const { return m_state; }
 
-    explicit Frontend(Camera camera)
+    explicit Frontend(const FrontendConfig &config)
         : m_state(State::Start),
-          m_camera(std::move(camera)) {}
+          m_camera(config.camera) {}
 
 private:
     void initialize(const cv::Mat &image, vo_time_t time);
     void tracking(const cv::Mat &image, vo_time_t time);
     cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
-    void _finish_tracking(const cv::Mat &new_tri_res, const std::vector<cv::DMatch> &matches);
+    void _finish_tracking(const cv::Mat &new_tri_res,
+                          const std::vector<cv::DMatch> &matches);
     void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
         if (m_map) { m_map->insert_map_points(points); }
     }
 
 private:
+    FrontendConfig m_config;
     Camera m_camera;
     State m_state;
 
