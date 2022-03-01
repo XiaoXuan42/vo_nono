@@ -122,8 +122,6 @@ void Frontend::get_image(const cv::Mat &image, vo_time_t t) {
         detect_and_compute(image, kpts, dscpts);
         m_keyframe =
                 std::make_shared<Frame>(Frame::create_frame(dscpts, kpts, t));
-        m_keyframe->set_Rcw(cv::Mat::eye(3, 3, CV_32F));
-        m_keyframe->set_Tcw(cv::Mat::zeros(3, 1, CV_32F));
 
         m_state = State::Initializing;
     } else if (m_state == State::Initializing) {
@@ -133,7 +131,7 @@ void Frontend::get_image(const cv::Mat &image, vo_time_t t) {
         m_state = State::Tracking;
     } else if (m_state == State::Tracking) {
         assert(m_keyframe);
-        tracking(image);
+        tracking(image, vo_nono::vo_time_t());
     } else {
         unimplemented();
     }
@@ -144,7 +142,7 @@ void Frontend::initialize(const cv::Mat &image, vo_time_t time) {
     cv::Mat dscpts;
     detect_and_compute(image, kpts, dscpts);
     std::vector<cv::DMatch> matches =
-            match_descriptor(m_keyframe->get_dscpt_array(), dscpts);
+            match_descriptor(m_keyframe->get_dscpts(), dscpts);
 
     const std::vector<cv::KeyPoint> &prev_kpts = m_keyframe->get_kpts();
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
@@ -160,7 +158,8 @@ void Frontend::initialize(const cv::Mat &image, vo_time_t time) {
                                        m_camera.get_intrinsic_mat());
     cv::Mat Rcw, t;
     cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, t);
-    m_cur_frame = Frame::create_frame(dscpts, kpts, time);
+    m_cur_frame = std::make_shared<Frame>(
+            Frame::create_frame(dscpts, kpts, time, Rcw, t));
 
     // triangulate points
     cv::Mat tri_res;
@@ -173,7 +172,48 @@ void Frontend::initialize(const cv::Mat &image, vo_time_t time) {
     _finish_tracking(tri_res, matches);
 }
 
-void Frontend::tracking(const cv::Mat &image) {}
+void Frontend::tracking(const cv::Mat &image, vo_time_t time) {
+    std::vector<cv::KeyPoint> kpts;
+    cv::Mat dscpts;
+    detect_and_compute(image, kpts, dscpts);
+    std::vector<cv::DMatch> matches =
+            match_descriptor(m_keyframe->get_dscpts(), dscpts);
+
+    std::vector<cv::DMatch> new_point_match;
+    std::vector<cv::Point2f> new_point1, new_point2;
+    std::vector<cv::Point2f> known_img_pt2;
+    std::vector<cv::Matx31f> known_pt_coords;
+    const std::vector<cv::KeyPoint> &prev_kpts = m_keyframe->get_kpts();
+
+    for (auto &match : matches) {
+        if (m_keyframe->is_pt_set(match.queryIdx)) {
+            known_pt_coords.push_back(m_keyframe->get_pt_coord(match.queryIdx));
+            known_img_pt2.push_back(kpts[match.trainIdx].pt);
+        } else {
+            new_point_match.push_back(match);
+            new_point1.push_back(prev_kpts[match.queryIdx].pt);
+            new_point2.push_back(kpts[match.trainIdx].pt);
+        }
+    }
+    // todo: retracking(known_point_match is not enough)
+    // recover pose of current frame
+    cv::Mat rcw_vec, tcw_vec, Rcw;
+    cv::solvePnPRansac(known_pt_coords, known_img_pt2,
+                       m_camera.get_intrinsic_mat(), m_camera.get_dist_coeff(),
+                       rcw_vec, tcw_vec);
+    cv::Rodrigues(rcw_vec, Rcw);
+    m_cur_frame = std::make_shared<Frame>(
+            Frame::create_frame(dscpts, kpts, time, Rcw, tcw_vec));
+
+    // triangulate new points
+    cv::Mat tri_res;
+    cv::Mat proj_mat1 =
+            get_proj_mat(m_keyframe->get_Rcw(), m_keyframe->get_Tcw());
+    cv::Mat proj_mat2 = get_proj_mat(Rcw, tcw_vec);
+    cv::triangulatePoints(proj_mat1, proj_mat2, new_point1, new_point2,
+                          tri_res);
+    _finish_tracking(tri_res, new_point_match);
+}
 
 void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
                                 const std::vector<cv::DMatch> &matches) {

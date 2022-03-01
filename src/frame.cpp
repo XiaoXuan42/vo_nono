@@ -1,11 +1,15 @@
 #include "vo_nono/frame.h"
 
-namespace vo_nono {
-Frame::vo_id_t Frame::frame_id_cnt = 0;
+#include <utility>
 
-Frame Frame::create_frame(cv::Mat descriptor, std::vector<cv::KeyPoint> kpts, vo_time_t time) {
+namespace vo_nono {
+vo_id_t Frame::frame_id_cnt = 0;
+
+Frame Frame::create_frame(cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
+                          vo_time_t time, cv::Mat Rcw, cv::Mat Tcw) {
     vo_id_t old_id = frame_id_cnt;
     frame_id_cnt += 1;
-    return Frame(old_id, std::move(descriptor), std::move(kpts), time);
+    return Frame(old_id, std::move(descriptor), std::move(kpts), time,
+                 std::move(Rcw), std::move(Tcw));
 }
-}
+}// namespace vo_nono

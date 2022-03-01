@@ -44,7 +44,7 @@ public:
 
 private:
     void initialize(const cv::Mat &image, vo_time_t time);
-    void tracking(const cv::Mat &image);
+    void tracking(const cv::Mat &image, vo_time_t time);
     cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
     void _finish_tracking(const cv::Mat &new_tri_res, const std::vector<cv::DMatch> &matches);
     void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
