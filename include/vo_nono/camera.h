@@ -10,12 +10,14 @@ public:
     Camera() : m_mat(cv::Mat::eye(3, 3, CV_32F)) {}
     explicit Camera(cv::Mat o_mat) : m_mat(std::move(o_mat)) {}
 
-    [[nodiscard]] const cv::Mat &get_intrinsic_mat() const { return m_mat; }
-    [[nodiscard]] const cv::Mat &get_dist_coeff() const { return m_dist_coeff; }
+    [[nodiscard]] const cv::Mat& get_intrinsic_mat() const { return m_mat; }
+    [[nodiscard]] const std::vector<float>& get_dist_coeff() const {
+        return m_dist_coeff;
+    }
 
 private:
     cv::Mat m_mat;
-    cv::Mat m_dist_coeff;
+    std::vector<float> m_dist_coeff;
 };
 }// namespace vo_nono
 
