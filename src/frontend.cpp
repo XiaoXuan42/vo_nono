@@ -1,6 +1,7 @@
 #include "vo_nono/frontend.h"
 
 #include <algorithm>
+#include <iostream>
 #include <opencv2/calib3d.hpp>
 #include <vector>
 
@@ -48,8 +49,8 @@ void Frontend::get_image(const cv::Mat &image, vo_time_t t) {
         cv::Mat dscpts;
         std::vector<cv::KeyPoint> kpts;
         detect_and_compute(image, kpts, dscpts);
-        m_keyframe =
-                std::make_shared<Frame>(Frame::create_frame(dscpts, kpts, t));
+        m_keyframe = std::make_shared<Frame>(
+                Frame::create_frame(dscpts, std::move(kpts), t));
 
         m_state = State::Initializing;
     } else if (m_state == State::Initializing) {
@@ -89,7 +90,7 @@ void Frontend::initialize(const cv::Mat &image, vo_time_t time) {
     cv::Mat Rcw, t_cw;
     cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, t_cw);
     m_cur_frame = std::make_shared<Frame>(
-            Frame::create_frame(dscpts, kpts, time, Rcw, t_cw));
+            Frame::create_frame(dscpts, std::move(kpts), time, Rcw, t_cw));
 
     // triangulate points
     cv::Mat tri_res;
@@ -125,24 +126,34 @@ void Frontend::tracking(const cv::Mat &image, vo_time_t time) {
             new_point2.push_back(kpts[match.trainIdx].pt);
         }
     }
+
+    std::cout << "new point: " << new_point1.size() << std::endl;
+    std::cout << "old point: " << known_img_pt2.size() << std::endl;
+
     // todo: retracking(known_point_match is not enough)
     // recover pose of current frame
-    cv::Mat rcw_vec, tcw_vec, Rcw;
+    cv::Mat rcw_vec, t_cw, Rcw;
     cv::solvePnPRansac(known_pt_coords, known_img_pt2,
                        m_camera.get_intrinsic_mat(), m_camera.get_dist_coeff(),
-                       rcw_vec, tcw_vec);
+                       rcw_vec, t_cw);
     cv::Rodrigues(rcw_vec, Rcw);
     m_cur_frame = std::make_shared<Frame>(
-            Frame::create_frame(dscpts, kpts, time, Rcw, tcw_vec));
+            Frame::create_frame(dscpts, std::move(kpts), time, Rcw, t_cw));
 
     // triangulate new points
     cv::Mat tri_res(4, (int) new_point1.size(), CV_32F);
     cv::Mat proj_mat1 =
             get_proj_mat(m_keyframe->get_Rcw(), m_keyframe->get_Tcw());
-    cv::Mat proj_mat2 = get_proj_mat(Rcw, tcw_vec);
+    cv::Mat proj_mat2 = get_proj_mat(Rcw, t_cw);
     cv::triangulatePoints(proj_mat1, proj_mat2, new_point1, new_point2,
                           tri_res);
+
     _finish_tracking(tri_res, new_point_match);
+    _try_switch_keyframe(new_point1.size(), known_img_pt2.size());
+
+    std::cout << m_cur_frame->get_id() << ":\n"
+              << Rcw << std::endl
+              << t_cw << std::endl;
 }
 
 void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
@@ -170,5 +181,27 @@ void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
         }
     }
     insert_map_points(new_points);
+}
+
+void Frontend::_try_switch_keyframe(size_t new_pt, size_t old_pt) {
+    assert(m_cur_frame);
+    assert(m_keyframe);
+
+    bool should_change = false;
+    const size_t already_set = m_keyframe->get_set_cnt();
+    const size_t total_kpts = m_keyframe->get_kpts().size();
+
+    if (already_set * 4 >= total_kpts * 5) {
+        std::cout << "change because set enough points" << std::endl;
+        should_change = true;
+    } else if (new_pt * 4 >= old_pt * 5) {
+        std::cout << "change because too may new points" << std::endl;
+        should_change = true;
+    }
+    if (should_change) {
+        std::cout << "Change keyframe!" << std::endl;
+        std::cout << "Keyframe: " << m_cur_frame->get_id() << std::endl;
+        m_keyframe = m_cur_frame;
+    }
 }
 }// namespace vo_nono

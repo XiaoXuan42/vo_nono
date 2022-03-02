@@ -1,5 +1,6 @@
 #include <fstream>
 #include <string>
+#include <iostream>
 
 #include "vo_nono/types.h"
 #include "vo_nono/config.h"
@@ -20,11 +21,18 @@ int main(int argc, const char *argv[]) {
     vo_nono::Frontend frontend = vo_nono::Frontend(config);
 
     TumDataBase database(argv[2]);
+    int frame_id = 0;
     while (!database.is_end()) {
         double cur_time = database.cur_time();
         cv::Mat img = database.cur_image_gray();
         database.next();
+        std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
         frontend.get_image(img, vo_nono::vo_time_from(cur_time));
+        std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+        double time_used = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1).count();
+        std::cout << "Frame " << frame_id << " cost " << time_used << " seconds." << std::endl;
+        std::cout << "-------------------------------------------------------------" << std::endl;
+        frame_id += 1;
     }
 
     return 0;

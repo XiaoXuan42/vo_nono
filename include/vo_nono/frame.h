@@ -34,6 +34,7 @@ public:
     [[nodiscard]] const std::vector<cv::KeyPoint> &get_kpts() const {
         return m_kpts;
     }
+    [[nodiscard]] size_t get_set_cnt() const { return m_set_cnt; }
 
     void set_Rcw(const cv::Mat &Rcw) {
         assert(Rcw.rows == 3);
@@ -62,6 +63,7 @@ public:
     void set_pt(int i, vo_id_t id, float x, float y, float z) {
         assert(m_pt_id.count(i) == 0);
         m_pt_id.insert({i, PointCache(id, x, y, z)});
+        m_set_cnt += 1;
     }
 
     cv::Matx31f get_pt_coord(int i) const {
@@ -81,7 +83,8 @@ private:
           m_kpts(std::move(kpts)),
           m_time(time),
           m_Rcw(std::move(Rcw)),
-          m_Tcw(std::move(Tcw)) {}
+          m_Tcw(std::move(Tcw)),
+          m_set_cnt(0) {}
 
     vo_id_t m_id;
     cv::Mat m_descriptor;
@@ -93,6 +96,7 @@ private:
 
     // from index of m_kpts to points' ID and coordinate
     std::unordered_map<int, PointCache> m_pt_id;
+    size_t m_set_cnt;
 };
 }// namespace vo_nono
 
