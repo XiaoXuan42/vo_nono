@@ -32,14 +32,6 @@ public:
     static std::vector<cv::DMatch> match_descriptor(const cv::Mat &dscpt1,
                                                     const cv::Mat &dscpt2);
 
-    static void compute_essential_mat(
-            const std::vector<std::pair<cv::Point2f, cv::Point2f>> &pts,
-            cv::Mat &W, cv::Mat &U, cv::Mat &Vt);
-
-    static double assess_essential_mat(
-            const cv::Mat &U, const cv::Mat &Vt,
-            const std::vector<std::pair<cv::Point2f, cv::Point2f>> &pts);
-
     [[nodiscard]] State get_state() const { return m_state; }
 
     explicit Frontend(const FrontendConfig &config)

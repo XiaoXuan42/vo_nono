@@ -7,12 +7,12 @@
 #include <random>
 
 namespace vo_nono {
-    constexpr double eps = 0.001;
+    constexpr double EPS = 0.001;
     uint64_t rand64();
 }
 
-#define assert_float_eq(A, B) assert(fabs((double)(A) - (double)(B)) < vo_nono::eps);
+#define assert_float_eq(A, B) assert(fabs((double)(A) - (double)(B)) < vo_nono::EPS);
 #define unimplemented() assert(false);
-#define float_eq_zero(A) (fabs((double)(A)) < vo_nono::eps)
+#define float_eq_zero(A) (fabs((double)(A)) < vo_nono::EPS)
 
 #endif//VO_NONO_UTIL_H

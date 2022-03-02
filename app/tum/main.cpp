@@ -23,6 +23,7 @@ int main(int argc, const char *argv[]) {
     while (!database.is_end()) {
         double cur_time = database.cur_time();
         cv::Mat img = database.cur_image_gray();
+        database.next();
         frontend.get_image(img, vo_nono::vo_time_from(cur_time));
     }
 

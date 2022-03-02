@@ -8,7 +8,7 @@
 TumDataBase::TumDataBase(const std::string& base_path)
     : m_base_path(base_path) {
     m_cur = 0;
-    std::ifstream stream(base_path);
+    std::ifstream stream(base_path + "/rgb.txt");
     if (!stream.is_open()) { return; }
     std::string str;
     while (std::getline(stream, str)) {
