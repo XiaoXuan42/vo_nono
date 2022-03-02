@@ -43,8 +43,8 @@ public:
     [[nodiscard]] State get_state() const { return m_state; }
 
     explicit Frontend(const FrontendConfig &config)
-        : m_state(State::Start),
-          m_camera(config.camera) {}
+        : m_camera(config.camera),
+          m_state(State::Start) {}
 
 private:
     void initialize(const cv::Mat &image, vo_time_t time);

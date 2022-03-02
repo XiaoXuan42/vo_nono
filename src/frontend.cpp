@@ -217,7 +217,7 @@ void Frontend::tracking(const cv::Mat &image, vo_time_t time) {
 
 void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
                                 const std::vector<cv::DMatch> &matches) {
-    assert(new_tri_res.cols == matches.size());
+    assert(new_tri_res.cols == (int)matches.size());
     std::vector<vo_uptr<MapPoint>> new_points;
     for (size_t i = 0; i < matches.size(); ++i) {
         cv::Mat cur_point = new_tri_res.col((int) i);
