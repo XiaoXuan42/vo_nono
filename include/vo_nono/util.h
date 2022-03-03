@@ -17,12 +17,15 @@ uint64_t rand64();
 #define float_eq_zero(A) (fabs((double) (A)) < vo_nono::EPS)
 
 #ifdef NDEBUG
-#define log_debug(contents) ;
+#define log_debug_line(contents) ;
 #define log_debug_pos(contents) ;
 #else
 #include <iostream>
 
 #define log_debug(contents) \
+    (std::cout << contents)
+
+#define log_debug_line(contents) \
     (std::cout << contents << std::endl)
 
 #define log_debug_pos(contents) \

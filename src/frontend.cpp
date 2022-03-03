@@ -103,7 +103,7 @@ void Frontend::initialize(const cv::Mat &image, double time) {
     cv::triangulatePoints(proj_mat1, proj_mat2, matched_pt1, matched_pt2,
                           tri_res);
 
-    log_debug("Initialize with R: " << std::endl
+    log_debug_line("Initialize with R: " << std::endl
                                     << Rcw << std::endl
                                     << "T: " << std::endl
                                     << t_cw << std::endl
@@ -142,8 +142,8 @@ void Frontend::tracking(const cv::Mat &image, double time) {
         }
     }
 
-    log_debug("Number of new points: " << new_point1.size());
-    log_debug("Number of old points: " << known_img_pt2.size());
+    log_debug_line("Number of new points: " << new_point1.size());
+    log_debug_line("Number of old points: " << known_img_pt2.size());
 
     // todo: retracking(known_point_match is not enough)
     // recover pose of current frame
@@ -155,7 +155,7 @@ void Frontend::tracking(const cv::Mat &image, double time) {
     m_cur_frame->set_Rcw(Rcw);
     m_cur_frame->set_Tcw(t_cw);
 
-    log_debug(m_cur_frame->get_id() << ":\n"
+    log_debug_line(m_cur_frame->get_id() << ":\n"
                                     << Rcw << std::endl
                                     << t_cw << std::endl);
 
@@ -208,11 +208,11 @@ void Frontend::_try_switch_keyframe(size_t new_pt, size_t old_pt) {
     const size_t total_kpts = m_keyframe->get_kpts().size();
 
     if (already_set * 4 >= total_kpts * 5) {
-        log_debug("change because set enough points");
+        log_debug_line("change because set enough points");
         should_change = true;
     }
     if (should_change) {
-        log_debug("New keyframe id: " << m_cur_frame->get_id());
+        log_debug_line("New keyframe id: " << m_cur_frame->get_id());
         m_keyframe = m_cur_frame;
     }
 }

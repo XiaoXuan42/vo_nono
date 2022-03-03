@@ -39,7 +39,7 @@ public:
           m_camera(config.camera),
           m_state(State::Start),
           m_map(std::move(p_map)) {
-        log_debug("Frontend camera intrinsic matrix:\n"
+        log_debug_line("Frontend camera intrinsic matrix:\n"
                   << m_camera.get_intrinsic_mat());
     }
 
