@@ -20,8 +20,8 @@ FrontendConfig frontend_config_from_yaml_node(const YAML::Node &node) {
         camera_mat.at<float>(1, 2) = camera_node["cy"].as<float>();
         res.camera = Camera(camera_mat);
 
-        if (node["dist"]) {
-            res.camera.set_dist_coeff(node["dist"].as<std::vector<float>>());
+        if (camera_node["dist"]) {
+            res.camera.set_dist_coeff(camera_node["dist"].as<std::vector<float>>());
         }
     }
     return res;
