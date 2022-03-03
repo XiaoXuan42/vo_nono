@@ -71,6 +71,11 @@ public:
         return m_pt_id.at(i).coord;
     }
 
+    vo_id_t get_pt_id(int i) const {
+        assert(m_pt_id.count(i) != 0);
+        return m_pt_id.at(i).id;
+    }
+
     bool is_pt_set(int i) const { return m_pt_id.count(i) != 0; }
 
 private:
