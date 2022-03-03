@@ -4,7 +4,6 @@
 #include <iomanip>
 #include <iostream>
 #include <opencv2/imgcodecs.hpp>
-#include <sstream>
 
 TumDataBase::TumDataBase(const std::string& base_path)
     : m_base_path(base_path) {
@@ -49,7 +48,6 @@ void TumDataBase::trajectory_to_tum(
         pose.rowRange(0, 3).col(3).copyTo(t);
         pose.rowRange(0, 3).colRange(0, 3).copyTo(R);
         R.convertTo(R64, CV_64F);
-        std::cout << R64 << std::endl;
         get_quaternion(R64, quat);
         o_stream << time << " ";
         for (int i = 0; i < 3; ++i) { o_stream << t.at<float>(i, 0) << " "; }

@@ -104,11 +104,11 @@ void Frontend::initialize(const cv::Mat &image, double time) {
                           tri_res);
 
     log_debug_line("Initialize with R: " << std::endl
-                                    << Rcw << std::endl
-                                    << "T: " << std::endl
-                                    << t_cw << std::endl
-                                    << "Number of map points: "
-                                    << tri_res.cols);
+                                         << Rcw << std::endl
+                                         << "T: " << std::endl
+                                         << t_cw << std::endl
+                                         << "Number of map points: "
+                                         << tri_res.cols);
     _finish_tracking(tri_res, matches);
 }
 
@@ -146,18 +146,20 @@ void Frontend::tracking(const cv::Mat &image, double time) {
     log_debug_line("Number of old points: " << known_img_pt2.size());
 
     // todo: retracking(known_point_match is not enough)
+    // todo: camera dist coeff?
+
     // recover pose of current frame
     cv::Mat rcw_vec, t_cw, Rcw;
     cv::solvePnPRansac(known_pt_coords, known_img_pt2,
-                       m_camera.get_intrinsic_mat(), m_camera.get_dist_coeff(),
-                       rcw_vec, t_cw);
+                       m_camera.get_intrinsic_mat(), std::vector<float>(),
+                       rcw_vec, t_cw, false, 1000, 0.1);
     cv::Rodrigues(rcw_vec, Rcw);
     m_cur_frame->set_Rcw(Rcw);
     m_cur_frame->set_Tcw(t_cw);
 
     log_debug_line(m_cur_frame->get_id() << ":\n"
-                                    << Rcw << std::endl
-                                    << t_cw << std::endl);
+                                         << Rcw << std::endl
+                                         << t_cw << std::endl);
 
     // triangulate new points
     if (!new_point1.empty()) {

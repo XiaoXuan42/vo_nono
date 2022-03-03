@@ -7,8 +7,17 @@
 #include "vo_nono/system.h"
 #include "vo_nono/types.h"
 
+#define OUTPUT_REDIR
+
+#ifdef OUTPUT_REDIR
+#include <cstdio>
+#endif
+
 int main(int argc, const char *argv[]) {
     if (argc < 3) { return 0; }
+#ifdef OUTPUT_REDIR
+    if (argc == 5) { freopen(argv[4], "w", stdout); }
+#endif
     std::ifstream stream(argv[1]);
     std::stringstream sstream;
     if (!stream.is_open()) { return 0; }
@@ -42,11 +51,15 @@ int main(int argc, const char *argv[]) {
         frame_id += 1;
     }
 
-    if (argc == 4) {
-        std::vector<std::pair<double, cv::Mat>> trajectory = system.get_trajectory();
+    if (argc >= 4) {
+        std::vector<std::pair<double, cv::Mat>> trajectory =
+                system.get_trajectory();
         std::cout << "Save Trajectory to " << argv[3] << std::endl;
         TumDataBase::trajectory_to_tum(trajectory, argv[3]);
     }
+#ifdef OUTPUT_REDIR
+    if (argc >= 5) { fclose(stdout); }
+#endif
 
     return 0;
 }
