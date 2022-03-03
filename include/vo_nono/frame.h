@@ -24,12 +24,12 @@ private:
 
 public:
     static Frame create_frame(cv::Mat descriptor,
-                              std::vector<cv::KeyPoint> kpts, vo_time_t time,
+                              std::vector<cv::KeyPoint> kpts, double time,
                               cv::Mat Rcw = cv::Mat::eye(3, 3, CV_32F),
                               cv::Mat Tcw = cv::Mat::zeros(3, 1, CV_32F));
 
     [[nodiscard]] vo_id_t get_id() const { return m_id; }
-    [[nodiscard]] vo_time_t get_time() const { return m_time; }
+    [[nodiscard]] double get_time() const { return m_time; }
     [[nodiscard]] cv::Mat get_dscpts() const { return m_descriptor; }
     [[nodiscard]] const std::vector<cv::KeyPoint> &get_kpts() const {
         return m_kpts;
@@ -57,8 +57,14 @@ public:
         m_Tcw = Tcw;
     }
 
-    [[nodiscard]] cv::Mat get_Rcw() const { return m_Rcw; }
-    [[nodiscard]] cv::Mat get_Tcw() const { return m_Tcw; }
+    [[nodiscard]] cv::Mat get_Rcw() const { return m_Rcw.clone(); }
+    [[nodiscard]] cv::Mat get_Tcw() const { return m_Tcw.clone(); }
+    [[nodiscard]] cv::Mat get_pose() const {
+        cv::Mat pose = cv::Mat::zeros(3, 4, CV_32F);
+        m_Rcw.copyTo(pose.rowRange(0, 3).colRange(0, 3));
+        m_Tcw.copyTo(pose.rowRange(0, 3).col(3));
+        return pose;
+    }
 
     void set_pt(int i, vo_id_t id, float x, float y, float z) {
         assert(m_pt_id.count(i) == 0);
@@ -82,7 +88,7 @@ private:
     static vo_id_t frame_id_cnt;
 
     Frame(vo_id_t id, cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
-          vo_time_t time, cv::Mat Rcw, cv::Mat Tcw)
+          double time, cv::Mat Rcw, cv::Mat Tcw)
         : m_id(id),
           m_descriptor(std::move(descriptor)),
           m_kpts(std::move(kpts)),
@@ -94,7 +100,7 @@ private:
     vo_id_t m_id;
     cv::Mat m_descriptor;
     std::vector<cv::KeyPoint> m_kpts;
-    vo_time_t m_time;
+    double m_time;
 
     cv::Mat m_Rcw;
     cv::Mat m_Tcw;

@@ -23,7 +23,7 @@ public:
         Tracking,
     };
 
-    void get_image(const cv::Mat &image, vo_time_t t);
+    void get_image(const cv::Mat &image, double t);
 
     static void detect_and_compute(const cv::Mat &image,
                                    std::vector<cv::KeyPoint> &kpts,
@@ -34,13 +34,18 @@ public:
 
     [[nodiscard]] State get_state() const { return m_state; }
 
-    explicit Frontend(const FrontendConfig &config)
-        : m_camera(config.camera),
-          m_state(State::Start) {}
+    explicit Frontend(const FrontendConfig &config, vo_ptr<Map> p_map = vo_ptr<Map>())
+        : m_config(config),
+          m_camera(config.camera),
+          m_state(State::Start),
+          m_map(std::move(p_map)) {
+        log_debug("Frontend camera intrinsic matrix:\n"
+                  << m_camera.get_intrinsic_mat());
+    }
 
 private:
-    void initialize(const cv::Mat &image, vo_time_t time);
-    void tracking(const cv::Mat &image, vo_time_t time);
+    void initialize(const cv::Mat &image, double time);
+    void tracking(const cv::Mat &image, double time);
     cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
     void _finish_tracking(const cv::Mat &new_tri_res,
                           const std::vector<cv::DMatch> &matches);

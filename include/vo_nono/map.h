@@ -10,6 +10,7 @@
 namespace vo_nono {
 class Map {
 public:
+    using Trajectory = std::vector<std::pair<double, cv::Mat>>;
     void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
         m_points.reserve(m_points.size() +
                          std::distance(points.begin(), points.end()));
@@ -17,8 +18,24 @@ public:
                         std::make_move_iterator(points.end()));
     }
 
+    void insert_key_frame(const vo_ptr<Frame> &frame) {
+        m_frames.push_back(frame);
+    }
+
+    [[nodiscard]] Trajectory get_trajectory()
+            const {
+        Trajectory trajectory;
+        trajectory.reserve(m_frames.size());
+        for (const vo_ptr<Frame> &frame : m_frames) {
+            trajectory.emplace_back(
+                    std::make_pair(frame->get_time(), frame->get_pose()));
+        }
+        return trajectory;
+    }
+
 private:
     std::vector<vo_uptr<MapPoint>> m_points;
+    std::vector<vo_ptr<Frame>> m_frames;
 };
 }// namespace vo_nono
 

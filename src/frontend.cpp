@@ -43,7 +43,7 @@ cv::Mat Frontend::get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t_cw) {
     return proj;
 }
 
-void Frontend::get_image(const cv::Mat &image, vo_time_t t) {
+void Frontend::get_image(const cv::Mat &image, double t) {
     if (m_state == State::Start) {
         assert(!m_keyframe);
         cv::Mat dscpts;
@@ -52,21 +52,24 @@ void Frontend::get_image(const cv::Mat &image, vo_time_t t) {
         m_keyframe = std::make_shared<Frame>(
                 Frame::create_frame(dscpts, std::move(kpts), t));
 
+        m_map->insert_key_frame(m_keyframe);
         m_state = State::Initializing;
     } else if (m_state == State::Initializing) {
         assert(m_keyframe);
         initialize(image, t);
 
+        m_map->insert_key_frame(m_cur_frame);
         m_state = State::Tracking;
     } else if (m_state == State::Tracking) {
         assert(m_keyframe);
-        tracking(image, vo_nono::vo_time_t());
+        tracking(image, t);
+        m_map->insert_key_frame(m_cur_frame);
     } else {
         unimplemented();
     }
 }
 
-void Frontend::initialize(const cv::Mat &image, vo_time_t time) {
+void Frontend::initialize(const cv::Mat &image, double time) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
     detect_and_compute(image, kpts, dscpts);
@@ -109,7 +112,7 @@ void Frontend::initialize(const cv::Mat &image, vo_time_t time) {
     _finish_tracking(tri_res, matches);
 }
 
-void Frontend::tracking(const cv::Mat &image, vo_time_t time) {
+void Frontend::tracking(const cv::Mat &image, double time) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
     detect_and_compute(image, kpts, dscpts);

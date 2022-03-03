@@ -4,6 +4,7 @@
 #include <opencv2/core/core.hpp>
 
 #include "vo_nono/frontend.h"
+#include "vo_nono/map.h"
 #include "vo_nono/types.h"
 
 namespace vo_nono {
@@ -13,14 +14,20 @@ struct SystemConfig {
 
 class System {
 public:
-    void get_image(const cv::Mat& image, vo_time_t t);
-
     explicit System(const SystemConfig& config)
         : m_config(config),
-          m_frontend(config.frontend_config) {}
+          m_map(std::make_shared<Map>(Map())),
+          m_frontend(config.frontend_config, m_map) {}
+
+    void get_image(const cv::Mat& image, double t);
+
+    [[nodiscard]] Map::Trajectory get_trajectory() const {
+        return m_map->get_trajectory();
+    }
 
 private:
     SystemConfig m_config;
+    vo_ptr<Map> m_map;
     Frontend m_frontend;
 };
 }// namespace vo_nono
