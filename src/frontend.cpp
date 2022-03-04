@@ -7,6 +7,11 @@
 #include "vo_nono/point.h"
 #include "vo_nono/util.h"
 
+#ifndef NDEBUG
+#include <opencv2/features2d.hpp>
+#include <opencv2/highgui.hpp>
+#endif
+
 namespace vo_nono {
 // detect feature points and compute descriptors
 void Frontend::detect_and_compute(const cv::Mat &image,
@@ -36,6 +41,8 @@ std::vector<cv::DMatch> Frontend::match_descriptor(const cv::Mat &dscpt1,
 }
 
 cv::Mat Frontend::get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t_cw) {
+    assert(Rcw.type() == CV_32F);
+    assert(t_cw.type() == CV_32F);
     cv::Mat proj = cv::Mat::zeros(3, 4, CV_32F);
     Rcw.copyTo(proj.rowRange(0, 3).colRange(0, 3));
     t_cw.copyTo(proj.rowRange(0, 3).col(3));
@@ -51,6 +58,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         detect_and_compute(image, kpts, dscpts);
         m_keyframe = std::make_shared<Frame>(
                 Frame::create_frame(dscpts, std::move(kpts), t));
+        m_cur_frame = m_keyframe;
 
         m_map->insert_key_frame(m_keyframe);
         m_state = State::Initializing;
@@ -67,6 +75,8 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     } else {
         unimplemented();
     }
+    assert(m_cur_frame);
+    m_cur_frame->img = image;
 }
 
 void Frontend::initialize(const cv::Mat &image, double time) {
@@ -92,6 +102,8 @@ void Frontend::initialize(const cv::Mat &image, double time) {
                                        0.999, 0.05);
     cv::Mat Rcw, t_cw;
     cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, t_cw);
+    Rcw.convertTo(Rcw, CV_32F);
+    t_cw.convertTo(t_cw, CV_32F);
     m_cur_frame = std::make_shared<Frame>(
             Frame::create_frame(dscpts, std::move(kpts), time, Rcw, t_cw));
 
@@ -152,14 +164,29 @@ void Frontend::tracking(const cv::Mat &image, double time) {
     cv::Mat rcw_vec, t_cw, Rcw;
     cv::solvePnPRansac(known_pt_coords, known_img_pt2,
                        m_camera.get_intrinsic_mat(), std::vector<float>(),
-                       rcw_vec, t_cw, false, 1000, 0.1);
+                       rcw_vec, t_cw, false, 100, 1);
     cv::Rodrigues(rcw_vec, Rcw);
-    m_cur_frame->set_Rcw(Rcw);
-    m_cur_frame->set_Tcw(t_cw);
+    Rcw.convertTo(Rcw, CV_32F);
+    t_cw.convertTo(t_cw, CV_32F);
+    m_cur_frame->set_pose(Rcw, t_cw);
 
     log_debug_line(m_cur_frame->get_id() << ":\n"
                                          << Rcw << std::endl
                                          << t_cw << std::endl);
+
+    /*
+#ifndef NDEBUG
+    if (t_cw.at<float>(2, 0) > 100.0f || t_cw.at<float>(2, 0) < -100.0f) {
+        cv::Mat matched_img;
+        cv::drawMatches(m_keyframe->img, m_keyframe->get_kpts(), image,
+                        m_cur_frame->get_kpts(), matches, matched_img);
+        std::string title = "image " + std::to_string(m_keyframe->get_id()) +
+                            " vs " + std::to_string(m_cur_frame->get_id());
+        cv::imshow(title, matched_img);
+        cv::waitKey(0);
+    };
+#endif
+     */
 
     // triangulate new points
     if (!new_point1.empty()) {
@@ -171,6 +198,7 @@ void Frontend::tracking(const cv::Mat &image, double time) {
                               tri_res);
         _finish_tracking(tri_res, new_point_match);
     }
+    m_cur_frame->set_pose(Rcw, t_cw);
     _try_switch_keyframe(new_point1.size(), known_img_pt2.size());
 }
 

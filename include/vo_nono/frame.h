@@ -13,6 +13,9 @@
 
 namespace vo_nono {
 class Frame {
+public:
+    cv::Mat img;
+
 private:
     struct PointCache {
         vo_id_t id;
@@ -40,21 +43,32 @@ public:
         assert(Rcw.rows == 3);
         assert(Rcw.cols == 3);
         assert_float_eq(cv::determinant(Rcw), 1.0f);
-        m_Rcw = Rcw;
+        if (Rcw.type() == CV_32F) {
+            m_Rcw = Rcw;
+        } else if (Rcw.type() == CV_64F) {
+            Rcw.convertTo(m_Rcw, CV_32F);
+        } else {
+            assert(false);
+        }
+        assert(m_Rcw.type() == CV_32F);
     }
+
     void set_Tcw(const cv::Mat &Tcw) {
         assert(Tcw.rows == 3);
         assert(Tcw.cols == 1);
-        m_Tcw = Tcw;
+        if (Tcw.type() == CV_32F) {
+            m_Tcw = Tcw;
+        } else if (Tcw.type() == CV_64F) {
+            Tcw.convertTo(m_Tcw, CV_32F);
+        } else {
+            assert(false);
+        }
+        assert(m_Tcw.type() == CV_32F);
     }
+
     void set_pose(const cv::Mat &Rcw, const cv::Mat &Tcw) {
-        assert(Rcw.rows == 3);
-        assert(Rcw.cols == 3);
-        assert_float_eq(cv::determinant(Rcw), 1.0f);
-        assert(Tcw.rows == 3);
-        assert(Tcw.cols == 1);
-        m_Rcw = Rcw;
-        m_Tcw = Tcw;
+        set_Rcw(Rcw);
+        set_Tcw(Tcw);
     }
 
     [[nodiscard]] cv::Mat get_Rcw() const { return m_Rcw.clone(); }

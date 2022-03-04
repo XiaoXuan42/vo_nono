@@ -22,11 +22,9 @@ uint64_t rand64();
 #else
 #include <iostream>
 
-#define log_debug(contents) \
-    (std::cout << contents)
+#define log_debug(contents) (std::cout << contents)
 
-#define log_debug_line(contents) \
-    (std::cout << contents << std::endl)
+#define log_debug_line(contents) (std::cout << contents << std::endl)
 
 #define log_debug_pos(contents) \
     (std::cout << __FUNCTION__ << ";" << __LINE__ << std::endl << contents)
