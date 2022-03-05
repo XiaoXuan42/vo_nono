@@ -1,10 +1,11 @@
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <iostream>
-#include <opencv2/core.hpp>
 #include <opencv2/calib3d.hpp>
+#include <opencv2/core.hpp>
 
+#include "vo_nono/motion.h"
 #include "vo_nono/util.h"
 
 cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
@@ -42,8 +43,8 @@ void test_init() {
 
     for (int i = 0; i < 10; ++i) {
         cv::Mat point(4, 1, CV_32F);
-        float x = (float)(rand() % 100) / 10;
-        float y = (float)(rand() % 100) / 10;
+        float x = (float) (rand() % 100) / 10;
+        float y = (float) (rand() % 100) / 10;
         float z = 10 + (rand() % 100) / 10;
         point.at<float>(0, 0) = x;
         point.at<float>(1, 0) = y;
@@ -67,7 +68,8 @@ void test_init() {
         img_points2.push_back(pt2);
     }
 
-    cv::Mat Ess = cv::findEssentialMat(img_points1, img_points2, iden33, cv::RANSAC, 0.999, 0.1);
+    cv::Mat Ess = cv::findEssentialMat(img_points1, img_points2, iden33,
+                                       cv::RANSAC, 0.999, 0.1);
     cv::Mat float_ess;
     Ess.convertTo(float_ess, CV_32F);
     cv::Mat R, t;
@@ -92,16 +94,37 @@ void test_init() {
     cv::triangulatePoints(proj1, proj2_es, img_points1, img_points2, tri_res);
     for (int i = 0; i < 10; ++i) {
         cv::Mat cur_pos = tri_res.col(i) / tri_res.at<float>(3, i);
-        std::cout << "ground truth:\n" << map_points[i].rowRange(0, 3) << std::endl;
+        std::cout << "ground truth:\n"
+                  << map_points[i].rowRange(0, 3) << std::endl;
         std::cout << "estimated:\n" << cur_pos << std::endl;
         for (int j = 0; j < 3; ++j) {
-            std::cout << map_points[i].at<float>(j, 0) / cur_pos.at<float>(j, 0) << " ";
+            std::cout << map_points[i].at<float>(j, 0) / cur_pos.at<float>(j, 0)
+                      << " ";
         }
         std::cout << std::endl;
     }
 }
 
+void test_motion() {
+    vo_nono::MotionPredictor predictor;
+    cv::Mat v_t = cv::Mat({3.0f, 4.0f, 5.0f});
+    cv::Mat rvec = cv::Mat({10.9f, 8.2f, 8.0f});
+    for (int i = 0; i <= 30; ++i) {
+        double t = (double) i / 30.0;
+        cv::Mat cur_T = v_t * (float) t;
+        cv::Mat cur_R;
+        cv::Rodrigues(t * rvec, cur_R);
+        if (predictor.is_available()) {
+            cv::Mat pred_R, pred_t;
+            predictor.predict_pose(t, pred_R, pred_t);
+            assert(cv::norm(pred_R - cur_R) <= 0.0001);
+            assert(cv::norm(pred_t - cur_T) <= 0.0001);
+        }
+        predictor.inform_pose(cur_R, cur_T, t);
+    }
+}
+
 int main() {
-    test_quaternion();
+    test_motion();
     return 0;
 }
