@@ -33,7 +33,7 @@ public:
                                                     const cv::Mat &dscpt2);
 
     static std::vector<cv::DMatch> filter_matches(
-            const std::vector<cv::DMatch>& matches,
+            const std::vector<cv::DMatch> &matches,
             const std::vector<cv::KeyPoint> &kpt1,
             const std::vector<cv::KeyPoint> &kpt2);
 
@@ -50,6 +50,17 @@ public:
     }
 
 private:
+    static std::vector<cv::DMatch> _filter_matches_by_mask(
+            const std::vector<cv::DMatch> &matches,
+            const std::vector<unsigned char> &mask) {
+        std::vector<cv::DMatch> res;
+        res.reserve(matches.size());
+        for (int i = 0; i < (int) matches.size(); ++i) {
+            if (mask[i]) { res.push_back(matches[i]); }
+        }
+        return res;
+    }
+
     void initialize(const cv::Mat &image, double time);
     void tracking(const cv::Mat &image, double time);
     cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
@@ -59,6 +70,7 @@ private:
     void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
         if (m_map) { m_map->insert_map_points(points); }
     }
+
 
 private:
     FrontendConfig m_config;

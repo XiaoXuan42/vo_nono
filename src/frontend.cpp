@@ -54,12 +54,7 @@ std::vector<cv::DMatch> Frontend::filter_matches(
     cv::findFundamentalMat(match_kp1, match_kp2, mask, cv::FM_RANSAC, 1, 0.99);
 
     assert(mask.size() == matches.size());
-    std::vector<cv::DMatch> res;
-    res.reserve(matches.size());
-    for (int i = 0; i < (int) matches.size(); ++i) {
-        if (mask[i]) { res.push_back(matches[i]); }
-    }
-    return res;
+    return _filter_matches_by_mask(matches, mask);
 }
 
 cv::Mat Frontend::get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t_cw) {
@@ -107,7 +102,6 @@ void Frontend::initialize(const cv::Mat &image, double time) {
     detect_and_compute(image, kpts, dscpts);
     std::vector<cv::DMatch> matches =
             match_descriptor(m_keyframe->get_dscpts(), dscpts);
-    matches = filter_matches(matches, m_keyframe->get_kpts(), kpts);
 
     const std::vector<cv::KeyPoint> &prev_kpts = m_keyframe->get_kpts();
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
@@ -118,11 +112,20 @@ void Frontend::initialize(const cv::Mat &image, double time) {
 
     // todo: less than 8 matched points?
     // todo: normalize scale?
-    // todo: filter outliers?
     // todo: findEssentialMat hyper parameters
+    std::vector<unsigned char> mask;
     cv::Mat Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
                                        m_camera.get_intrinsic_mat(), cv::RANSAC,
-                                       0.999, 0.05);
+                                       0.999, 0.05, mask);
+    // filter outliers
+    matches = _filter_matches_by_mask(matches, mask);
+    matched_pt1.clear();
+    matched_pt2.clear();
+    for (auto &match : matches) {
+        matched_pt1.push_back(prev_kpts[match.queryIdx].pt);
+        matched_pt2.push_back(kpts[match.trainIdx].pt);
+    }
+
     cv::Mat Rcw, t_cw;
     cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, t_cw);
     Rcw.convertTo(Rcw, CV_32F);
