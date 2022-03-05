@@ -13,6 +13,9 @@ public:
     [[nodiscard]] bool is_end() const;
     [[nodiscard]] cv::Mat cur_image_gray() const;
     [[nodiscard]] double cur_time() const;
+    [[nodiscard]] std::string cur_path() const {
+        return m_img_paths[m_cur];
+    }
     void next();
 
     static void trajectory_to_tum(const std::vector<std::pair<double, cv::Mat>> &trajectory, const char *path);
