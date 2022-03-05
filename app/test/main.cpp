@@ -5,6 +5,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/calib3d.hpp>
 
+#include "vo_nono/util.h"
+
 cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
     cv::Mat proj(3, 4, CV_32F);
     Rcw.copyTo(proj.rowRange(0, 3).colRange(0, 3));
@@ -12,7 +14,17 @@ cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
     return proj;
 }
 
-int main() {
+void test_quaternion() {
+    cv::Mat rot, rc_rot;
+    cv::Mat rvec = cv::Mat({3.0f, 7.89f, -10.5f});
+    cv::Rodrigues(rvec, rot);
+    float q[4];
+    vo_nono::rotation_mat_to_quaternion(rot, q);
+    rc_rot = vo_nono::quaternion_to_rotation_mat(q);
+    std::cout << rot << std::endl << rc_rot;
+}
+
+void test_init() {
     srand(time(NULL));
 
     cv::Mat iden33 = cv::Mat::eye(3, 3, CV_32F);
@@ -73,7 +85,7 @@ int main() {
     }
     cv::recoverPose(Ess, img_points1, img_points2, R, t);
     std::cout << "R:\n" << R << std::endl;
-    std::cout << "t:\n" << t << std::endl;
+    std::cout << "m_t:\n" << t << std::endl;
     cv::Mat proj2_es = get_proj(R, t);
 
     cv::Mat tri_res;
@@ -87,6 +99,9 @@ int main() {
         }
         std::cout << std::endl;
     }
+}
 
+int main() {
+    test_quaternion();
     return 0;
 }
