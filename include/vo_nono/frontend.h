@@ -65,7 +65,8 @@ private:
     void tracking(const cv::Mat &image, double time);
     cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
     void _finish_tracking(const cv::Mat &new_tri_res,
-                          const std::vector<cv::DMatch> &matches);
+                          const std::vector<cv::DMatch> &matches,
+                          bool expect_positive = true);
     void _try_switch_keyframe(size_t new_pt, size_t old_pt);
     void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
         if (m_map) { m_map->insert_map_points(points); }

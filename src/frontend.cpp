@@ -147,7 +147,7 @@ void Frontend::initialize(const cv::Mat &image, double time) {
                                          << t_cw << std::endl
                                          << "Number of map points: "
                                          << tri_res.cols);
-    _finish_tracking(tri_res, matches);
+    _finish_tracking(tri_res, matches, true);
 }
 
 void Frontend::tracking(const cv::Mat &image, double time) {
@@ -221,15 +221,17 @@ void Frontend::tracking(const cv::Mat &image, double time) {
         cv::Mat proj_mat2 = get_proj_mat(Rcw, t_cw);
         cv::triangulatePoints(proj_mat1, proj_mat2, new_point1, new_point2,
                               tri_res);
-        _finish_tracking(tri_res, new_point_match);
+        _finish_tracking(tri_res, new_point_match, false);
     }
     m_cur_frame->set_pose(Rcw, t_cw);
     _try_switch_keyframe(new_point1.size(), known_img_pt2.size());
 }
 
 void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
-                                const std::vector<cv::DMatch> &matches) {
+                                const std::vector<cv::DMatch> &matches,
+                                bool expect_positive) {
     assert(new_tri_res.cols == (int) matches.size());
+    bool neg_expect_positive = !expect_positive;
     std::vector<vo_uptr<MapPoint>> new_points;
     for (size_t i = 0; i < matches.size(); ++i) {
         cv::Mat cur_point = new_tri_res.col((int) i);
@@ -240,7 +242,7 @@ void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
             float y = cur_point.at<float>(1);
             float z = cur_point.at<float>(2);
 
-            if (z > EPS) {
+            if (neg_expect_positive || z > EPS) {
                 vo_uptr<MapPoint> cur_map_pt = std::make_unique<MapPoint>(
                         MapPoint::create_map_point(x, y, z));
                 m_keyframe->set_pt(matches[i].queryIdx, cur_map_pt->get_id(), x,
