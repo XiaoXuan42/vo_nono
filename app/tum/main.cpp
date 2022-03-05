@@ -48,6 +48,9 @@ int main(int argc, const char *argv[]) {
         std::cout << "---------------------------------------------------------"
                      "----"
                   << std::endl;
+        if (frame_id >= 5) {
+            break;
+        }
         frame_id += 1;
     }
 

@@ -57,6 +57,60 @@ std::vector<cv::DMatch> Frontend::filter_matches(
     return _filter_matches_by_mask(matches, mask);
 }
 
+void Frontend::filter_triangulate_points(
+        const cv::Mat &tri, const cv::Mat &Rcw1, const cv::Mat &tcw1,
+        const cv::Mat &Rcw2, const cv::Mat &tcw2,
+        const std::vector<cv::Point2f> &kpts1,
+        const std::vector<cv::Point2f> &kpts2, std::vector<bool> &inliers,
+        float thresh_square) {
+    assert(tri.cols == (int) kpts1.size());
+    assert(tri.cols == (int) kpts2.size());
+    const int total_pts = tri.cols;
+    inliers.resize(total_pts);
+    cv::Mat proj2 = get_proj_mat(Rcw2, tcw2);
+    for (int i = 0; i < total_pts; ++i) {
+        cv::Mat hm_coord = tri.col(i).clone();
+        hm_coord /= hm_coord.at<float>(3, 0);
+        cv::Mat coord = hm_coord.rowRange(0, 3);
+        // filter out infinite point
+        if (!std::isfinite(coord.at<float>(0, 0)) ||
+            !std::isfinite(coord.at<float>(1, 0)) ||
+            !std::isfinite(coord.at<float>(2, 0))) {
+            inliers[i] = false;
+            continue;
+        }
+        // depth must be positive
+        cv::Mat coord_c1 = Rcw1 * coord + tcw1;
+        cv::Mat coord_c2 = Rcw2 * coord + tcw2;
+        if (coord_c1.at<float>(2, 0) < EPS || coord_c1.at<float>(2, 0) < EPS) {
+            inliers[i] = false;
+            continue;
+        }
+
+        // compute parallax
+        cv::Mat op1 = coord + tcw1;// (coord - (-tcw1) = coord + tcw1)
+        cv::Mat op2 = coord + tcw2;
+        double cos_val = op1.dot(op2) / (cv::norm(op1) * cv::norm(op2));
+        if (cos_val > 0.99998) {
+            inliers[i] = false;
+            continue;
+        }
+
+        // re-projection error
+        cv::Mat reproj_pt = proj2 * hm_coord;
+        reproj_pt /= reproj_pt.at<float>(2, 0);
+        float dx = reproj_pt.at<float>(0, 0) - kpts2[i].x,
+              dy = reproj_pt.at<float>(1, 0) - kpts2[i].y;
+        float diff_square = dx * dx + dy * dy;
+        if (diff_square > thresh_square) {
+            inliers[i] = false;
+            continue;
+        }
+
+        inliers[i] = true;
+    }
+}
+
 cv::Mat Frontend::get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t_cw) {
     assert(Rcw.type() == CV_32F);
     assert(t_cw.type() == CV_32F);
@@ -140,6 +194,11 @@ void Frontend::initialize(const cv::Mat &image, double time) {
     cv::Mat proj_mat2 = get_proj_mat(Rcw, t_cw);
     cv::triangulatePoints(proj_mat1, proj_mat2, matched_pt1, matched_pt2,
                           tri_res);
+    std::vector<bool> inliers;
+    filter_triangulate_points(tri_res, m_keyframe->get_Rcw(),
+                              m_keyframe->get_Tcw(), m_cur_frame->get_Rcw(),
+                              m_cur_frame->get_Tcw(), matched_pt1, matched_pt2,
+                              inliers);
 
     log_debug_line("Initialize with R: " << std::endl
                                          << Rcw << std::endl
@@ -147,7 +206,7 @@ void Frontend::initialize(const cv::Mat &image, double time) {
                                          << t_cw << std::endl
                                          << "Number of map points: "
                                          << tri_res.cols);
-    _finish_tracking(tri_res, matches, true);
+    _finish_tracking(tri_res, matches, inliers);
 }
 
 void Frontend::tracking(const cv::Mat &image, double time) {
@@ -201,18 +260,6 @@ void Frontend::tracking(const cv::Mat &image, double time) {
                                          << Rcw << std::endl
                                          << t_cw << std::endl);
 
-#ifndef NDEBUG
-    if (t_cw.at<float>(2, 0) > 10000.0f || t_cw.at<float>(2, 0) < -10000.0f) {
-        cv::Mat matched_img;
-        cv::drawMatches(m_keyframe->img, m_keyframe->get_kpts(), image,
-                        m_cur_frame->get_kpts(), matches, matched_img);
-        std::string title = "image " + std::to_string(m_keyframe->get_id()) +
-                            " vs " + std::to_string(m_cur_frame->get_id());
-        cv::imshow(title, matched_img);
-        cv::waitKey(0);
-    };
-#endif
-
     // triangulate new points
     if (!new_point1.empty()) {
         cv::Mat tri_res(4, (int) new_point1.size(), CV_32F);
@@ -221,7 +268,11 @@ void Frontend::tracking(const cv::Mat &image, double time) {
         cv::Mat proj_mat2 = get_proj_mat(Rcw, t_cw);
         cv::triangulatePoints(proj_mat1, proj_mat2, new_point1, new_point2,
                               tri_res);
-        _finish_tracking(tri_res, new_point_match, false);
+        std::vector<bool> inliers;
+        filter_triangulate_points(tri_res, m_keyframe->get_Rcw(),
+                                  m_keyframe->get_Tcw(), Rcw, t_cw, new_point1,
+                                  new_point2, inliers);
+        _finish_tracking(tri_res, new_point_match, inliers);
     }
     m_cur_frame->set_pose(Rcw, t_cw);
     _try_switch_keyframe(new_point1.size(), known_img_pt2.size());
@@ -229,11 +280,12 @@ void Frontend::tracking(const cv::Mat &image, double time) {
 
 void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
                                 const std::vector<cv::DMatch> &matches,
-                                bool expect_positive) {
+                                const std::vector<bool> &inliers) {
     assert(new_tri_res.cols == (int) matches.size());
-    bool neg_expect_positive = !expect_positive;
+    assert(inliers.size() == matches.size());
     std::vector<vo_uptr<MapPoint>> new_points;
     for (size_t i = 0; i < matches.size(); ++i) {
+        if (!inliers[i]) { continue; }
         cv::Mat cur_point = new_tri_res.col((int) i);
         if (!float_eq_zero(cur_point.at<float>(3))) {
             // not infinite point
@@ -242,15 +294,13 @@ void Frontend::_finish_tracking(const cv::Mat &new_tri_res,
             float y = cur_point.at<float>(1);
             float z = cur_point.at<float>(2);
 
-            if (neg_expect_positive || z > EPS) {
-                vo_uptr<MapPoint> cur_map_pt = std::make_unique<MapPoint>(
-                        MapPoint::create_map_point(x, y, z));
-                m_keyframe->set_pt(matches[i].queryIdx, cur_map_pt->get_id(), x,
-                                   y, z);
-                m_cur_frame->set_pt(matches[i].trainIdx, cur_map_pt->get_id(),
-                                    x, y, z);
-                new_points.push_back(std::move(cur_map_pt));
-            }
+            vo_uptr<MapPoint> cur_map_pt = std::make_unique<MapPoint>(
+                    MapPoint::create_map_point(x, y, z));
+            m_keyframe->set_pt(matches[i].queryIdx, cur_map_pt->get_id(), x, y,
+                               z);
+            m_cur_frame->set_pt(matches[i].trainIdx, cur_map_pt->get_id(), x, y,
+                                z);
+            new_points.push_back(std::move(cur_map_pt));
         }
     }
     insert_map_points(new_points);
