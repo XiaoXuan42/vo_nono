@@ -40,6 +40,28 @@ std::vector<cv::DMatch> Frontend::match_descriptor(const cv::Mat &dscpt1,
     return matches;
 }
 
+std::vector<cv::DMatch> Frontend::filter_matches(
+        const std::vector<cv::DMatch> &matches,
+        const std::vector<cv::KeyPoint> &kpt1,
+        const std::vector<cv::KeyPoint> &kpt2) {
+    std::vector<cv::Point2f> match_kp1, match_kp2;
+    for (auto &match : matches) {
+        match_kp1.push_back(kpt1[match.queryIdx].pt);
+        match_kp2.push_back(kpt2[match.trainIdx].pt);
+    }
+
+    std::vector<unsigned char> mask;
+    cv::findFundamentalMat(match_kp1, match_kp2, mask, cv::FM_RANSAC, 1, 0.99);
+
+    assert(mask.size() == matches.size());
+    std::vector<cv::DMatch> res;
+    res.reserve(matches.size());
+    for (int i = 0; i < (int) matches.size(); ++i) {
+        if (mask[i]) { res.push_back(matches[i]); }
+    }
+    return res;
+}
+
 cv::Mat Frontend::get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t_cw) {
     assert(Rcw.type() == CV_32F);
     assert(t_cw.type() == CV_32F);
@@ -85,6 +107,7 @@ void Frontend::initialize(const cv::Mat &image, double time) {
     detect_and_compute(image, kpts, dscpts);
     std::vector<cv::DMatch> matches =
             match_descriptor(m_keyframe->get_dscpts(), dscpts);
+    matches = filter_matches(matches, m_keyframe->get_kpts(), kpts);
 
     const std::vector<cv::KeyPoint> &prev_kpts = m_keyframe->get_kpts();
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
@@ -130,6 +153,7 @@ void Frontend::tracking(const cv::Mat &image, double time) {
     detect_and_compute(image, kpts, dscpts);
     std::vector<cv::DMatch> matches =
             match_descriptor(m_keyframe->get_dscpts(), dscpts);
+    matches = filter_matches(matches, m_keyframe->get_kpts(), kpts);
     m_cur_frame =
             std::make_shared<Frame>(Frame::create_frame(dscpts, kpts, time));
 
@@ -174,9 +198,8 @@ void Frontend::tracking(const cv::Mat &image, double time) {
                                          << Rcw << std::endl
                                          << t_cw << std::endl);
 
-    /*
 #ifndef NDEBUG
-    if (t_cw.at<float>(2, 0) > 100.0f || t_cw.at<float>(2, 0) < -100.0f) {
+    if (t_cw.at<float>(2, 0) > 10000.0f || t_cw.at<float>(2, 0) < -10000.0f) {
         cv::Mat matched_img;
         cv::drawMatches(m_keyframe->img, m_keyframe->get_kpts(), image,
                         m_cur_frame->get_kpts(), matches, matched_img);
@@ -186,7 +209,6 @@ void Frontend::tracking(const cv::Mat &image, double time) {
         cv::waitKey(0);
     };
 #endif
-     */
 
     // triangulate new points
     if (!new_point1.empty()) {

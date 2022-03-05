@@ -32,15 +32,21 @@ public:
     static std::vector<cv::DMatch> match_descriptor(const cv::Mat &dscpt1,
                                                     const cv::Mat &dscpt2);
 
+    static std::vector<cv::DMatch> filter_matches(
+            const std::vector<cv::DMatch>& matches,
+            const std::vector<cv::KeyPoint> &kpt1,
+            const std::vector<cv::KeyPoint> &kpt2);
+
     [[nodiscard]] State get_state() const { return m_state; }
 
-    explicit Frontend(const FrontendConfig &config, vo_ptr<Map> p_map = vo_ptr<Map>())
+    explicit Frontend(const FrontendConfig &config,
+                      vo_ptr<Map> p_map = vo_ptr<Map>())
         : m_config(config),
           m_camera(config.camera),
           m_state(State::Start),
           m_map(std::move(p_map)) {
         log_debug_line("Frontend camera intrinsic matrix:\n"
-                  << m_camera.get_intrinsic_mat());
+                       << m_camera.get_intrinsic_mat());
     }
 
 private:
