@@ -46,14 +46,14 @@ std::vector<cv::DMatch> Frontend::filter_matches(
         const std::vector<cv::DMatch> &matches,
         const std::vector<cv::KeyPoint> &kpt1,
         const std::vector<cv::KeyPoint> &kpt2, const double ransac_th) {
-    std::vector<cv::Point2f> match_kp1, match_kp2;
+    std::vector<cv::KeyPoint> match_kp1, match_kp2;
     for (auto &match : matches) {
-        match_kp1.push_back(kpt1[match.queryIdx].pt);
-        match_kp2.push_back(kpt2[match.trainIdx].pt);
+        match_kp1.push_back(kpt1[match.queryIdx]);
+        match_kp2.push_back(kpt2[match.trainIdx]);
     }
 
     std::vector<unsigned char> mask;
-    _filter_match_pts(match_kp1, match_kp2, mask, ransac_th);
+    _filter_match_key_pts(match_kp1, match_kp2, mask, ransac_th);
     return _filter_by_mask(matches, mask);
 }
 
@@ -219,12 +219,19 @@ void Frontend::tracking(const cv::Mat &image, double t) {
     m_cur_frame = std::make_shared<Frame>(Frame::create_frame(dscpts, kpts, t));
     m_cur_frame->img = image;
 
-    if (track_with_motion(20)) {
+    // todo: retracking(both model fails)
+    // todo: camera dist coeff?
+    int motion_res = track_with_motion(20);
+    if (motion_res == 2) {
         log_debug_line("Frame " << m_cur_frame->get_id() << ": motion model.");
-    } else {
+    } else if (motion_res == 1) {
+        track_with_keyframe(true);
         log_debug_line("Frame " << m_cur_frame->get_id()
                                 << ": keyframe model.");
-        old_track();
+    } else {
+        track_with_keyframe(false);
+        log_debug_line("Frame " << m_cur_frame->get_id()
+                                << ": keyframe model.");
     }
     log_debug_line(m_cur_frame->get_id()
                    << ":\n"
@@ -232,7 +239,7 @@ void Frontend::tracking(const cv::Mat &image, double t) {
                    << m_cur_frame->get_Tcw() << std::endl);
 }
 
-bool Frontend::old_track() {
+bool Frontend::track_with_keyframe(bool b_valid_init) {
     std::vector<cv::DMatch> matches = match_descriptor(
             m_keyframe->get_dscpts(), m_cur_frame->get_dscpts());
     matches = filter_matches(matches, m_keyframe->get_kpts(),
@@ -260,14 +267,21 @@ bool Frontend::old_track() {
         }
     }
 
-    // todo: retracking(known_point_match is not enough)
-    // todo: camera dist coeff?
-
     // recover pose of current frame
     cv::Mat rcw_vec, t_cw, Rcw;
+    if (b_valid_init) {
+        cv::Rodrigues(m_cur_frame->get_Rcw(), rcw_vec);
+    } else {
+        cv::Rodrigues(m_last_frame->get_Rcw(), rcw_vec);
+    }
+    rcw_vec.convertTo(rcw_vec, CV_64F);
+    t_cw = m_cur_frame->get_Tcw();
+    t_cw.convertTo(t_cw, CV_64F);
+    log_debug_line("Track reference frame with " << known_pt_coords.size()
+                                                 << " match points.");
     cv::solvePnPRansac(known_pt_coords, known_img_pt2,
                        m_camera.get_intrinsic_mat(), std::vector<float>(),
-                       rcw_vec, t_cw, false, 100, 1);
+                       rcw_vec, t_cw, true, 100, 1);
     cv::Rodrigues(rcw_vec, Rcw);
     Rcw.convertTo(Rcw, CV_32F);
     t_cw.convertTo(t_cw, CV_32F);
@@ -292,15 +306,14 @@ bool Frontend::old_track() {
     return true;
 }
 
-bool Frontend::track_with_motion(const size_t least_pts) {
-    if (!m_motion_pred.is_available() || !m_last_frame) { return false; }
+int Frontend::track_with_motion(const size_t cnt_pt_th) {
+    if (!m_motion_pred.is_available() || !m_last_frame) { return 0; }
     cv::Mat pred_Rcw, pred_tcw;
     m_motion_pred.predict_pose(m_cur_frame->get_time(), pred_Rcw, pred_tcw);
     const cv::Mat proj_mat = get_proj_mat(pred_Rcw, pred_tcw);
 
     std::vector<int> match_left_id, match_right_id;
     std::vector<cv::Matx31f> map_points;
-    //std::vector<cv::Point2f> origin_img_pts;
     std::vector<cv::KeyPoint> origin_img_kpts;
     std::vector<cv::Mat> origin_img_descs;
     std::vector<cv::Point2f> proj_img_pts;
@@ -336,9 +349,9 @@ bool Frontend::track_with_motion(const size_t least_pts) {
     assert(map_points.size() == proj_img_pts.size());
     assert(proj_img_pts.size() == origin_img_kpts.size());
     assert(origin_img_kpts.size() == origin_img_descs.size());
-    if (map_points.size() < least_pts) {
+    if (map_points.size() < cnt_pt_th) {
         log_debug_line("Motion model failed because of not enough map points.");
-        return false;
+        return 0;
     }
 
     std::map<int, int> match_book;
@@ -385,41 +398,24 @@ bool Frontend::track_with_motion(const size_t least_pts) {
     origin_img_kpts = _filter_by_mask(origin_img_kpts, inliers);
     assert(matched_key_pts.size() == map_points.size());
     assert(match_left_id.size() == match_right_id.size());
-    if (matched_key_pts.size() < least_pts) {
+    if (matched_key_pts.size() < cnt_pt_th) {
         log_debug_line(
                 "Motion model failed because of not enough match points.");
-        return false;
+        return 0;
     }
 
     std::vector<unsigned char> inliers2;
     _filter_match_key_pts(origin_img_kpts, matched_key_pts, inliers2);
-    // _filter_match_pts(origin_img_pts, matched_pts, inliers2);
     matched_key_pts = _filter_by_mask(matched_key_pts, inliers2);
     map_points = _filter_by_mask(map_points, inliers2);
     match_left_id = _filter_by_mask(match_left_id, inliers2);
     match_right_id = _filter_by_mask(match_right_id, inliers2);
-    if (matched_key_pts.size() < least_pts) {
+    if (matched_key_pts.size() < cnt_pt_th) {
         log_debug_line(
                 "Motion model failed because of not enough match points after "
                 "filtration.");
-        return false;
+        return 0;
     }
-
-    /*
-    // show image
-    std::vector<cv::DMatch> cur_matches;
-    cv::Mat match_img;
-    for (int i = 0; i < (int) match_left_id.size(); ++i) {
-        cur_matches.emplace_back(
-                cv::DMatch(match_left_id[i], match_right_id[i], 0.0));
-    }
-    std::string win_title = std::to_string(m_last_frame->get_id()) + " vs " +
-                            std::to_string(m_cur_frame->get_id());
-    cv::drawMatches(m_last_frame->img, m_last_frame->get_kpts(),
-                    m_cur_frame->img, m_cur_frame->get_kpts(), cur_matches,
-                    match_img);
-    cv::imshow(win_title, match_img);
-    cv::waitKey(0);*/
 
     // recover pose
     assert(map_points.size() == matched_key_pts.size());
@@ -434,16 +430,16 @@ bool Frontend::track_with_motion(const size_t least_pts) {
     cv::solvePnPRansac(map_points, matched_pts, m_camera.get_intrinsic_mat(),
                        std::vector<float>(), rvec, tcw, true, 100, 2, 0.99,
                        pnp_inliers);
-    if (pnp_inliers.size() < least_pts) {
-        log_debug_line("Motion model failed because of pnp.");
-        log_debug_line("Motion model prediction:\n" << tcw);
-        return false;
-    }
-
     cv::Rodrigues(rvec, Rcw);
     Rcw.convertTo(Rcw, CV_32F);
     tcw.convertTo(tcw, CV_32F);
     m_cur_frame->set_pose(Rcw, tcw);
+    if (pnp_inliers.size() < cnt_pt_th) {
+        log_debug_line("Motion model failed because of pnp ("
+                       << pnp_inliers.size() << ") inliers found.");
+        log_debug_line("Motion model prediction:\n" << tcw);
+        return 1;
+    }
 
     // set map points for new frame
     assert(map_points.size() == match_left_id.size());
@@ -454,7 +450,7 @@ bool Frontend::track_with_motion(const size_t least_pts) {
                 map_points[i](0, 0), map_points[i](1, 0), map_points[i](2, 0));
     }
     log_debug_line("Motion model with " << map_points.size() << " points.");
-    return true;
+    return 2;
 }
 
 void Frontend::_finish_tracking(const cv::Mat &new_tri_res,

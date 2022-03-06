@@ -113,8 +113,8 @@ private:
 
     void initialize(const cv::Mat &image, double t);
     void tracking(const cv::Mat &image, double t);
-    bool track_with_motion(const size_t least_pts);
-    bool old_track();
+    int track_with_motion(const size_t cnt_pt_th);
+    bool track_with_keyframe(bool b_valid_init);
 
     cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
     void _finish_tracking(const cv::Mat &new_tri_res,
