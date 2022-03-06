@@ -10,7 +10,7 @@ public:
     void predict_pose(double time, cv::Mat& Rcw, cv::Mat& tcw) const;
     void inform_pose(const cv::Mat& new_Rcw, const cv::Mat& new_tcw,
                      double time);
-    [[nodiscard]] bool is_available() const { return m_inform_cnt > 2; }
+    [[nodiscard]] bool is_available() const { return m_inform_cnt >= 2; }
 
 private:
     cv::Mat m_t[2];

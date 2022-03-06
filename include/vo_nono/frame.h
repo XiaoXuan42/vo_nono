@@ -16,15 +16,6 @@ class Frame {
 public:
     cv::Mat img;
 
-private:
-    struct PointCache {
-        vo_id_t id;
-        cv::Matx31f coord;
-        PointCache(vo_id_t id, float x, float y, float z)
-            : id(id),
-              coord(x, y, z) {}
-    };
-
 public:
     static Frame create_frame(cv::Mat descriptor,
                               std::vector<cv::KeyPoint> kpts, double time,
@@ -52,7 +43,6 @@ public:
         }
         assert(m_Rcw.type() == CV_32F);
     }
-
     void set_Tcw(const cv::Mat &Tcw) {
         assert(Tcw.rows == 3);
         assert(Tcw.cols == 1);
@@ -65,12 +55,10 @@ public:
         }
         assert(m_Tcw.type() == CV_32F);
     }
-
     void set_pose(const cv::Mat &Rcw, const cv::Mat &Tcw) {
         set_Rcw(Rcw);
         set_Tcw(Tcw);
     }
-
     [[nodiscard]] cv::Mat get_Rcw() const { return m_Rcw.clone(); }
     [[nodiscard]] cv::Mat get_Tcw() const { return m_Tcw.clone(); }
     [[nodiscard]] cv::Mat get_pose() const {
@@ -85,20 +73,38 @@ public:
         m_pt_id.insert({i, PointCache(id, x, y, z)});
         m_set_cnt += 1;
     }
-
-    cv::Matx31f get_pt_coord(int i) const {
+    cv::Mat get_pt_3dcoord(int i) const {
         assert(m_pt_id.count(i) != 0);
         return m_pt_id.at(i).coord;
     }
-
     vo_id_t get_pt_id(int i) const {
         assert(m_pt_id.count(i) != 0);
         return m_pt_id.at(i).id;
     }
-
+    cv::KeyPoint get_pt_keypt(int i) const {
+        assert(i < (int) m_kpts.size());
+        return m_kpts[i];
+    }
+    cv::Mat get_pt_desc(int i) const {
+        assert(m_descriptor.rows > i);
+        return m_descriptor.row(i);
+    }
     bool is_pt_set(int i) const { return m_pt_id.count(i) != 0; }
 
+    int local_match(const cv::KeyPoint &other_pt, const cv::Mat &desc,
+                    const cv::Point2f &pos, float dist_th);
+
 private:
+    struct PointCache {
+        vo_id_t id;
+        cv::Mat coord;
+        PointCache(vo_id_t id, float x, float y, float z) : id(id) {
+            coord = cv::Mat(3, 1, CV_32F);
+            coord.at<float>(0, 0) = x;
+            coord.at<float>(0, 1) = y;
+            coord.at<float>(0, 2) = z;
+        }
+    };
     static vo_id_t frame_id_cnt;
 
     Frame(vo_id_t id, cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
@@ -121,6 +127,7 @@ private:
 
     // from index of m_kpts to points' ID and coordinate
     std::unordered_map<int, PointCache> m_pt_id;
+    // number of points that already have 3d coordinates.
     size_t m_set_cnt;
 };
 }// namespace vo_nono
