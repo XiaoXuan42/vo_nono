@@ -124,7 +124,33 @@ void test_motion() {
     }
 }
 
+void test_histogram() {
+    auto int_indexer = [](int a) { return a; };
+    vo_nono::Histogram<int> histo(100, int_indexer);
+    for (int i = 0; i < 100; ++i) {
+        histo.insert_element(i);
+    }
+    histo.cal_topK(1);
+    for (int i = 0; i < 100; ++i) {
+        assert(histo.is_topK(i));
+    }
+    for (int i = 0; i < 50; ++i) {
+        histo.insert_element(i);
+    }
+    for (int i = 0; i < 75; ++i) {
+        histo.insert_element(i);
+    }
+    histo.cal_topK(51);
+    for (int i = 0; i < 100; ++i) {
+        if (i < 75) {
+            assert(histo.is_topK(i));
+        } else {
+            assert(!histo.is_topK(i));
+        }
+    }
+}
+
 int main() {
-    test_motion();
+    test_histogram();
     return 0;
 }

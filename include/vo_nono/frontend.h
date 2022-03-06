@@ -37,8 +37,7 @@ public:
     static std::vector<cv::DMatch> filter_matches(
             const std::vector<cv::DMatch> &matches,
             const std::vector<cv::KeyPoint> &kpt1,
-            const std::vector<cv::KeyPoint> &kpt2,
-            double reproj_th = 1.0);
+            const std::vector<cv::KeyPoint> &kpt2, double ransac_th = 1.0);
 
     [[nodiscard]] State get_state() const { return m_state; }
 
@@ -65,13 +64,43 @@ private:
         return res;
     }
 
-    static inline void _filter_match_pts(
-            const std::vector<cv::Point2f> &pts1,
-            const std::vector<cv::Point2f> &pts2,
-            std::vector<unsigned char> &mask, double reproj_th = 1.0) {
-        cv::findFundamentalMat(pts1, pts2, mask, cv::FM_RANSAC, reproj_th,
+    static inline void _filter_match_pts(const std::vector<cv::Point2f> &pts1,
+                                         const std::vector<cv::Point2f> &pts2,
+                                         std::vector<unsigned char> &mask,
+                                         double ransac_th = 1.0) {
+        cv::findFundamentalMat(pts1, pts2, mask, cv::FM_RANSAC, ransac_th,
                                0.99);
         assert(mask.size() == pts1.size());
+    }
+
+    static inline void _filter_match_key_pts(
+            const std::vector<cv::KeyPoint> &kpts1,
+            const std::vector<cv::KeyPoint> &kpts2,
+            std::vector<unsigned char> &mask, double ransac_th = 1.0) {
+        assert(kpts1.size() == kpts2.size());
+        auto ang_diff_index = [](double diff_ang) {
+            if (diff_ang < 0) { diff_ang += 360; }
+            return (int) (diff_ang / 3.6);
+        };
+        Histogram<double> histo(101, ang_diff_index);
+        std::vector<cv::Point2f> pt21;
+        std::vector<cv::Point2f> pt22;
+        std::vector<double> ang_diff;
+        for (int i = 0; i < (int) kpts1.size(); ++i) {
+            double diff = kpts1[i].angle - kpts2[i].angle;
+            pt21.push_back(kpts1[i].pt);
+            pt22.push_back(kpts2[i].pt);
+            histo.insert_element(diff);
+            ang_diff.push_back(diff);
+        }
+        _filter_match_pts(pt21, pt22, mask, ransac_th);
+        assert(mask.size() == kpts1.size());
+        histo.cal_topK(3);
+        for (int i = 0; i < (int) kpts1.size(); ++i) {
+            if (!histo.is_topK(ang_diff[i])) {
+                mask[i] = 0;
+            }
+        }
     }
 
     void filter_triangulate_points(const cv::Mat &tri, const cv::Mat &Rcw1,
