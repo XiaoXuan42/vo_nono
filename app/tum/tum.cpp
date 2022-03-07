@@ -48,7 +48,9 @@ void TumDataBase::trajectory_to_tum(
         cv::Mat t(3, 1, CV_32F), R(3, 3, CV_32F), R64(3, 3, CV_64F);
         double quat[4];
         pose.rowRange(0, 3).col(3).copyTo(t);
+        t = -t; // optical center's coordinates in the world frame.
         pose.rowRange(0, 3).colRange(0, 3).copyTo(R);
+        R = R.t(); // transpose: camera to world
         R.convertTo(R64, CV_64F);
         get_quaternion(R64, quat);
         o_stream << time << " ";
