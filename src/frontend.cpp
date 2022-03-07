@@ -213,14 +213,17 @@ void Frontend::tracking(const cv::Mat &image, double t) {
 
     // todo: retracking(both model fails)
     // todo: camera dist coeff?
-    int motion_res = track_with_motion(20);
+    std::map<int, ReprojRes> book;
+    int motion_res = track_with_motion(20, book);
     if (motion_res == 2) {
         log_debug_line("Frame " << m_cur_frame->get_id() << ": motion model.");
     } else if (motion_res == 1) {
+        book.clear();
         track_with_keyframe(true);
         log_debug_line("Frame " << m_cur_frame->get_id()
                                 << ": keyframe model.");
     } else {
+        book.clear();
         track_with_keyframe(false);
         log_debug_line("Frame " << m_cur_frame->get_id()
                                 << ": keyframe model.");
@@ -300,41 +303,33 @@ bool Frontend::track_with_keyframe(bool b_estimate_valid) {
     return true;
 }
 
-int Frontend::track_with_motion(const size_t cnt_pt_th) {
+int Frontend::track_with_motion(const size_t cnt_pt_th,
+                                std::map<int, ReprojRes> &book) {
     if (!m_motion_pred.is_available() || !m_last_frame) { return 0; }
     cv::Mat pred_Rcw, pred_tcw;
     m_motion_pred.predict_pose(m_cur_frame->get_time(), pred_Rcw, pred_tcw);
     m_cur_frame->set_pose(pred_Rcw, pred_tcw);
 
-    std::map<int, ReprojRes> book;
     std::vector<int> img_pt_index;
     std::vector<cv::Matx31f> map_coords;
     std::vector<vo_id_t> map_point_ids;
     std::vector<cv::Point2f> img_pts;
     reproj_points_from_frame(m_last_frame, m_cur_frame, m_camera, book);
-    for (auto &pair : book) {
-        img_pt_index.push_back(pair.first);
-        img_pts.push_back(m_cur_frame->get_pt_keypt(pair.first).pt);
-        map_coords.push_back(
-                m_last_frame->get_pt_3dcoord(pair.second.point_index));
-        map_point_ids.push_back(pair.second.map_point_id);
+    if (book.size() < cnt_pt_th) {
+        log_debug_line("Not enough reprojection points.");
+        return 0;
     }
 
     std::vector<int> pnp_inliers;
-    cv::Mat rvec, Rcw, tcw = pred_tcw;
-    cv::Rodrigues(pred_Rcw, rvec);
-    rvec.convertTo(rvec, CV_64F);
-    tcw.convertTo(tcw, CV_64F);
-    cv::solvePnPRansac(map_coords, img_pts, m_camera.get_intrinsic_mat(),
-                       std::vector<float>(), rvec, tcw, true, 100, 2, 0.99,
-                       pnp_inliers);
-    cv::Rodrigues(rvec, Rcw);
-    Rcw.convertTo(Rcw, CV_32F);
-    tcw.convertTo(tcw, CV_32F);
+    cv::Mat Rcw = pred_Rcw, tcw = pred_tcw;
+    pnp_from_reproj_res(m_cur_frame, m_camera, book, img_pt_index,
+                        map_point_ids, map_coords, pnp_inliers, Rcw, tcw, true,
+                        2);
+
     m_cur_frame->set_pose(Rcw, tcw);
     if (pnp_inliers.size() < cnt_pt_th) {
         log_debug_line("Motion model failed because of pnp ("
-                       << pnp_inliers.size() << ") inliers found.");
+                               << pnp_inliers.size() << ") inliers found.");
         log_debug_line("Motion model prediction:\n" << tcw);
         return 1;
     }

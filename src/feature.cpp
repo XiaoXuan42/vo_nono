@@ -5,10 +5,37 @@
 #include "vo_nono/camera.h"
 
 namespace vo_nono {
-void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
-                              const vo_ptr<Frame> &right_frame,
-                              const Camera &camera,
-                              std::map<int, ReprojRes> &book) {
+void filter_match_key_pts(const std::vector<cv::KeyPoint>& kpts1,
+                          const std::vector<cv::KeyPoint>& kpts2,
+                          std::vector<unsigned char>& mask, double ransac_th) {
+    assert(kpts1.size() == kpts2.size());
+    auto ang_diff_index = [](double diff_ang) {
+        if (diff_ang < 0) { diff_ang += 360; }
+        return (int) (diff_ang / 3.6);
+    };
+    Histogram<double> histo(101, ang_diff_index);
+    std::vector<cv::Point2f> pt21;
+    std::vector<cv::Point2f> pt22;
+    std::vector<double> ang_diff;
+    for (int i = 0; i < (int) kpts1.size(); ++i) {
+        double diff = kpts1[i].angle - kpts2[i].angle;
+        pt21.push_back(kpts1[i].pt);
+        pt22.push_back(kpts2[i].pt);
+        histo.insert_element(diff);
+        ang_diff.push_back(diff);
+    }
+    filter_match_pts(pt21, pt22, mask, ransac_th);
+    assert(mask.size() == kpts1.size());
+    histo.cal_topK(3);
+    for (int i = 0; i < (int) kpts1.size(); ++i) {
+        if (!histo.is_topK(ang_diff[i])) { mask[i] = 0; }
+    }
+}
+
+void reproj_points_from_frame(const vo_ptr<Frame>& left_frame,
+                              const vo_ptr<Frame>& right_frame,
+                              const Camera& camera,
+                              std::map<int, ReprojRes>& book) {
     std::vector<int> match_left_id;
     std::vector<cv::KeyPoint> left_img_kpts;
     std::vector<cv::Mat> left_img_descs;
@@ -90,6 +117,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
     desc_dis = filter_by_mask(desc_dis, inliers);
     assert(match_left_id.size() == match_right_id.size());
 
+    if (match_left_id.size() < 10) { return; }
     std::vector<unsigned char> inliers2;
     filter_match_key_pts(left_img_kpts, right_img_kpts, inliers2);
     // right_img_kpts = filter_by_mask(right_img_kpts, inliers2);
@@ -101,7 +129,49 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                 .map_point_id = left_frame->get_pt_id(match_left_id[i]),
                 .point_index = match_left_id[i],
                 .desc_dis = desc_dis[i],
+                .coord = left_frame->get_pt_3dcoord(match_left_id[i]),
         };
     }
+}
+
+void pnp_from_reproj_res(const vo_ptr<Frame>& frame, const Camera& camera,
+                         const std::map<int, ReprojRes>& book,
+                         std::vector<int>& img_pt_index,
+                         std::vector<vo_id_t>& map_pt_ids,
+                         std::vector<cv::Matx31f>& map_pt_coords,
+                         std::vector<int>& inliers, cv::Mat& Rcw, cv::Mat& tcw,
+                         bool use_init, double reproj_error) {
+    img_pt_index.clear();
+    map_pt_ids.clear();
+    map_pt_coords.clear();
+    img_pt_index.reserve(book.size());
+    map_pt_ids.reserve(book.size());
+    map_pt_coords.reserve(book.size());
+
+    std::vector<cv::Point2f> img_pts;
+    img_pts.reserve(book.size());
+
+    inliers.clear();
+    for (auto& pair : book) {
+        img_pt_index.push_back(pair.first);
+        img_pts.push_back(frame->get_pt_keypt(pair.second.point_index).pt);
+        map_pt_ids.push_back(pair.second.map_point_id);
+        map_pt_coords.push_back(pair.second.coord);
+    }
+    cv::Mat rvec, tmp_tcw;
+    if (use_init) {
+        assert(Rcw.type() == CV_32F);
+        assert(tcw.type() == CV_32F);
+        cv::Mat tmp_Rcw;
+        Rcw.convertTo(tmp_Rcw, CV_64F);
+        cv::Rodrigues(tmp_Rcw, rvec);
+        tcw.convertTo(tmp_tcw, CV_64F);
+    }
+    cv::solvePnPRansac(map_pt_coords, img_pts, camera.get_intrinsic_mat(),
+                       std::vector<float>(), rvec, tmp_tcw, use_init, 100,
+                       reproj_error, 0.99, inliers);
+    cv::Rodrigues(rvec, Rcw);
+    Rcw.convertTo(Rcw, CV_32F);
+    tmp_tcw.convertTo(tcw, CV_32F);
 }
 }// namespace vo_nono
