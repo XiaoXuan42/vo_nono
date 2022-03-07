@@ -65,7 +65,8 @@ private:
     void tracking(const cv::Mat &image, double t);
     int track_with_motion(const size_t cnt_pt_th,
                           std::map<int, ReprojRes> &book);
-    bool track_with_keyframe(bool b_estimate_valid);
+    bool track_with_keyframe(bool b_estimate_valid,
+                             std::map<int, ReprojRes> &book);
     void _finish_tracking(const cv::Mat &new_tri_res,
                           const std::vector<cv::DMatch> &matches,
                           const std::vector<bool> &inliers);

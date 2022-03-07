@@ -219,12 +219,12 @@ void Frontend::tracking(const cv::Mat &image, double t) {
         log_debug_line("Frame " << m_cur_frame->get_id() << ": motion model.");
     } else if (motion_res == 1) {
         book.clear();
-        track_with_keyframe(true);
+        track_with_keyframe(true, book);
         log_debug_line("Frame " << m_cur_frame->get_id()
                                 << ": keyframe model.");
     } else {
         book.clear();
-        track_with_keyframe(false);
+        track_with_keyframe(false, book);
         log_debug_line("Frame " << m_cur_frame->get_id()
                                 << ": keyframe model.");
     }
@@ -234,7 +234,8 @@ void Frontend::tracking(const cv::Mat &image, double t) {
                    << m_cur_frame->get_Tcw() << std::endl);
 }
 
-bool Frontend::track_with_keyframe(bool b_estimate_valid) {
+bool Frontend::track_with_keyframe(bool b_estimate_valid,
+                                   std::map<int, ReprojRes> &book) {
     std::vector<cv::DMatch> matches = match_descriptor(
             m_keyframe->get_dscpts(), m_cur_frame->get_dscpts());
     matches = filter_matches(matches, m_keyframe->get_kpts(),
@@ -329,7 +330,7 @@ int Frontend::track_with_motion(const size_t cnt_pt_th,
     m_cur_frame->set_pose(Rcw, tcw);
     if (pnp_inliers.size() < cnt_pt_th) {
         log_debug_line("Motion model failed because of pnp ("
-                               << pnp_inliers.size() << ") inliers found.");
+                       << pnp_inliers.size() << ") inliers found.");
         log_debug_line("Motion model prediction:\n" << tcw);
         return 1;
     }
