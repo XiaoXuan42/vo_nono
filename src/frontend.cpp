@@ -215,7 +215,8 @@ void Frontend::initialize(const cv::Mat &image, double t) {
 void Frontend::tracking(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
-    detect_and_compute(image, kpts, dscpts);
+    TIME_IT(detect_and_compute(image, kpts, dscpts),
+            "Time cost for feature extraction: ");
     m_cur_frame = std::make_shared<Frame>(Frame::create_frame(dscpts, kpts, t));
     m_cur_frame->img = image;
 

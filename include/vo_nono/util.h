@@ -97,9 +97,13 @@ cv::Mat quaternion_to_rotation_mat(const float Q[]);
 #define float_eq_zero(A) (fabs((double) (A)) < vo_nono::EPS)
 
 #ifdef NDEBUG
+#define log_debug(contents) ;
 #define log_debug_line(contents) ;
 #define log_debug_pos(contents) ;
+#define TIMT_IT(CODE, msg) \
+    do { contents; } while (0);
 #else
+#include <chrono>
 #include <iostream>
 
 #define log_debug(contents) (std::cout << contents)
@@ -108,6 +112,20 @@ cv::Mat quaternion_to_rotation_mat(const float Q[]);
 
 #define log_debug_pos(contents) \
     (std::cout << __FUNCTION__ << ";" << __LINE__ << std::endl << contents)
+
+#define TIME_IT(CODE, msg)                                                     \
+    do {                                                                       \
+        std::chrono::steady_clock::time_point t1 =                             \
+                std::chrono::steady_clock::now();                              \
+        { CODE; }                                                              \
+        std::chrono::steady_clock::time_point t2 =                             \
+                std::chrono::steady_clock::now();                              \
+        std::chrono::duration<double> time_used =                              \
+                std::chrono::duration_cast<std::chrono::duration<double>>(t2 - \
+                                                                          t1); \
+        log_debug_line(msg << time_used.count());                              \
+    } while (0);
+
 #endif
 
 #endif//VO_NONO_UTIL_H
