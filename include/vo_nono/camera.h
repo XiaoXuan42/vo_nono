@@ -28,8 +28,8 @@ public:
     [[nodiscard]] const std::vector<float>& get_dist_coeff() const {
         return m_dist_coeff;
     }
-    [[nodiscard]] float get_width() { return m_width; }
-    [[nodiscard]] float get_height() { return m_height; }
+    [[nodiscard]] float get_width() const { return m_width; }
+    [[nodiscard]] float get_height() const { return m_height; }
 
 private:
     cv::Mat m_mat;

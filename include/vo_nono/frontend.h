@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "vo_nono/camera.h"
+#include "vo_nono/feature.h"
 #include "vo_nono/frame.h"
 #include "vo_nono/map.h"
 #include "vo_nono/motion.h"
@@ -52,57 +53,6 @@ public:
     }
 
 private:
-    template<typename T, typename U>
-    static std::vector<T> _filter_by_mask(const std::vector<T> &targets,
-                                          const std::vector<U> &mask) {
-        assert(targets.size() == mask.size());
-        std::vector<T> res;
-        res.reserve(targets.size());
-        for (int i = 0; i < (int) targets.size(); ++i) {
-            if (mask[i]) { res.push_back(targets[i]); }
-        }
-        return res;
-    }
-
-    static inline void _filter_match_pts(const std::vector<cv::Point2f> &pts1,
-                                         const std::vector<cv::Point2f> &pts2,
-                                         std::vector<unsigned char> &mask,
-                                         double ransac_th = 1.0) {
-        cv::findFundamentalMat(pts1, pts2, mask, cv::FM_RANSAC, ransac_th,
-                               0.99);
-        assert(mask.size() == pts1.size());
-    }
-
-    static inline void _filter_match_key_pts(
-            const std::vector<cv::KeyPoint> &kpts1,
-            const std::vector<cv::KeyPoint> &kpts2,
-            std::vector<unsigned char> &mask, double ransac_th = 1.0) {
-        assert(kpts1.size() == kpts2.size());
-        auto ang_diff_index = [](double diff_ang) {
-            if (diff_ang < 0) { diff_ang += 360; }
-            return (int) (diff_ang / 3.6);
-        };
-        Histogram<double> histo(101, ang_diff_index);
-        std::vector<cv::Point2f> pt21;
-        std::vector<cv::Point2f> pt22;
-        std::vector<double> ang_diff;
-        for (int i = 0; i < (int) kpts1.size(); ++i) {
-            double diff = kpts1[i].angle - kpts2[i].angle;
-            pt21.push_back(kpts1[i].pt);
-            pt22.push_back(kpts2[i].pt);
-            histo.insert_element(diff);
-            ang_diff.push_back(diff);
-        }
-        _filter_match_pts(pt21, pt22, mask, ransac_th);
-        assert(mask.size() == kpts1.size());
-        histo.cal_topK(3);
-        for (int i = 0; i < (int) kpts1.size(); ++i) {
-            if (!histo.is_topK(ang_diff[i])) {
-                mask[i] = 0;
-            }
-        }
-    }
-
     void filter_triangulate_points(const cv::Mat &tri, const cv::Mat &Rcw1,
                                    const cv::Mat &tcw1, const cv::Mat &Rcw2,
                                    const cv::Mat &tcw2,
@@ -114,9 +64,7 @@ private:
     void initialize(const cv::Mat &image, double t);
     void tracking(const cv::Mat &image, double t);
     int track_with_motion(const size_t cnt_pt_th);
-    bool track_with_keyframe(bool b_valid_init);
-
-    cv::Mat get_proj_mat(const cv::Mat &Rcw, const cv::Mat &t);
+    bool track_with_keyframe(bool b_estimate_valid);
     void _finish_tracking(const cv::Mat &new_tri_res,
                           const std::vector<cv::DMatch> &matches,
                           const std::vector<bool> &inliers);
