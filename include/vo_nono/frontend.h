@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "vo_nono/camera.h"
-#include "vo_nono/feature.h"
 #include "vo_nono/frame.h"
 #include "vo_nono/map.h"
 #include "vo_nono/motion.h"
@@ -18,6 +17,7 @@ struct FrontendConfig {
     Camera camera;
 };
 
+class ReprojRes;
 class Frontend {
 public:
     enum class State : int {
@@ -30,15 +30,18 @@ public:
 
     static void detect_and_compute(const cv::Mat &image,
                                    std::vector<cv::KeyPoint> &kpts,
-                                   cv::Mat &dscpts);
+                                   cv::Mat &dscpts, int nfeatures);
 
     static std::vector<cv::DMatch> match_descriptor(const cv::Mat &dscpt1,
-                                                    const cv::Mat &dscpt2);
+                                                    const cv::Mat &dscpt2,
+                                                    float soft_dis_th,
+                                                    float hard_dis_th,
+                                                    int expect_cnt);
 
     static std::vector<cv::DMatch> filter_matches(
             const std::vector<cv::DMatch> &matches,
             const std::vector<cv::KeyPoint> &kpt1,
-            const std::vector<cv::KeyPoint> &kpt2, double ransac_th = 1.0);
+            const std::vector<cv::KeyPoint> &kpt2, int topK = 3);
 
     [[nodiscard]] State get_state() const { return m_state; }
 
@@ -56,18 +59,18 @@ private:
     void filter_triangulate_points(const cv::Mat &tri, const cv::Mat &Rcw1,
                                    const cv::Mat &tcw1, const cv::Mat &Rcw2,
                                    const cv::Mat &tcw2,
-                                   const std::vector<cv::Point2f> &kpts1,
-                                   const std::vector<cv::Point2f> &kpts2,
+                                   const std::vector<cv::Point2f> &pts1,
+                                   const std::vector<cv::Point2f> &pts2,
                                    std::vector<bool> &inliers,
                                    float thresh_square = 1.0);
 
     void initialize(const cv::Mat &image, double t);
     void tracking(const cv::Mat &image, double t);
-    int track_with_motion(const size_t cnt_pt_th,
-                          std::map<int, ReprojRes> &book);
-    bool track_with_keyframe(bool b_estimate_valid,
-                             std::map<int, ReprojRes> &book);
-    void _finish_tracking(const cv::Mat &new_tri_res,
+    void reproj_with_motion(ReprojRes &proj_res);
+    void reproj_with_keyframe(ReprojRes &proj_res);
+    void reproj_pose_estimate(ReprojRes &proj_res, float reproj_th);
+    void triangulate_with_keyframe(const ReprojRes &proj_res);
+    void set_new_map_points(const cv::Mat &new_tri_res,
                           const std::vector<cv::DMatch> &matches,
                           const std::vector<bool> &inliers);
     void _try_switch_keyframe(size_t new_pt, size_t old_pt);

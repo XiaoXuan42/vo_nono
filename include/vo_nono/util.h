@@ -102,8 +102,8 @@ inline cv::Mat get_proj_mat(const cv::Mat &camera_intrin, const cv::Mat &Rcw,
 }
 
 template<typename T, typename U>
-inline std::vector<T> filter_by_mask(const std::vector<T> &targets,
-                                     const std::vector<U> &mask) {
+[[nodiscard]] inline std::vector<T> filter_by_mask(
+        const std::vector<T> &targets, const std::vector<U> &mask) {
     assert(targets.size() == mask.size());
     std::vector<T> res;
     res.reserve(targets.size());
@@ -146,7 +146,7 @@ inline std::vector<T> filter_by_mask(const std::vector<T> &targets,
         std::chrono::duration<double> time_used =                              \
                 std::chrono::duration_cast<std::chrono::duration<double>>(t2 - \
                                                                           t1); \
-        log_debug_line(msg << time_used.count());                              \
+        log_debug_line(msg << time_used.count() << " seconds.");               \
     } while (0);
 
 #endif
