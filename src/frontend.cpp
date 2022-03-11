@@ -18,14 +18,12 @@
 
 namespace vo_nono {
 struct ReprojInfo {
-    vo_id_t id{};
-    cv::Matx31f coord;
+    std::shared_ptr<MapPoint> map_pt;
     double dis{};
 
     ReprojInfo() = default;
-    ReprojInfo(vo_id_t o_id, cv::Matx31f o_coord, double o_dis)
-        : id(o_id),
-          coord(o_coord),
+    ReprojInfo(std::shared_ptr<MapPoint> o_map_pt, double o_dis)
+        : map_pt(std::move(o_map_pt)),
           dis(o_dis) {}
 };
 
@@ -38,9 +36,11 @@ public:
         m_id_to_index.clear();
     }
 
-    inline bool insert_info_check(int index, vo_id_t id,
-                                  const cv::Matx31f &coord, double dis) {
+    inline bool insert_info_check(int index,
+                                  const std::shared_ptr<MapPoint> &map_pt,
+                                  double dis) {
         self_check();
+        vo_id_t id = map_pt->get_id();
         if (m_id_to_index.count(id)) {
             int old_index = m_id_to_index[id];
             assert(m_index_to_info.count(old_index));
@@ -49,13 +49,13 @@ public:
             m_id_to_index.erase(id);
         }
         if (m_index_to_info.count(index)) {
-            vo_id_t old_id = m_index_to_info.at(index).id;
+            vo_id_t old_id = m_index_to_info.at(index).map_pt->get_id();
             assert(m_id_to_index.count(old_id));
             if (m_index_to_info.at(index).dis < dis) { return false; }
             m_id_to_index.erase(old_id);
             m_index_to_info.erase(index);
         }
-        m_index_to_info[index] = ReprojInfo(id, coord, dis);
+        m_index_to_info[index] = ReprojInfo(map_pt, dis);
         m_id_to_index[id] = index;
         self_check();
         return true;
@@ -70,7 +70,7 @@ public:
 
     inline void erase(int index) {
         if (m_index_to_info.count(index)) {
-            vo_id_t id = m_index_to_info.at(index).id;
+            vo_id_t id = m_index_to_info.at(index).map_pt->get_id();
             m_index_to_info.erase(index);
             assert(m_id_to_index.count(id));
             m_id_to_index.erase(id);
@@ -81,11 +81,12 @@ public:
     inline void self_check() const {
         assert(m_index_to_info.size() == m_id_to_index.size());
         for (auto &pair : m_index_to_info) {
-            vo_id_t id = pair.second.id;
+            vo_id_t id = pair.second.map_pt->get_id();
             assert(m_id_to_index.at(id) == pair.first);
         }
         for (auto &pair : m_id_to_index) {
-            assert(m_index_to_info.at(pair.second).id == pair.first);
+            assert(m_index_to_info.at(pair.second).map_pt->get_id() ==
+                   pair.first);
         }
     }
 
@@ -146,7 +147,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                          right_frame->get_Tcw());
     for (int i = 0; i < (int) left_frame->get_kpts().size(); ++i) {
         if (left_frame->is_pt_set(i)) {
-            cv::Mat coord = left_frame->get_pt_3dcoord(i);
+            cv::Mat coord = left_frame->get_map_pt(i)->get_coord();
             cv::Mat hm_coord(4, 1, CV_32F);
             coord.copyTo(hm_coord.rowRange(0, 3));
             hm_coord.at<float>(3, 0) = 1.0f;
@@ -163,8 +164,8 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                 continue;
             }
             proj_right_img_pts.emplace_back(img_x, img_y);
-            left_img_descs.push_back(left_frame->get_pt_desc(i));
-            left_img_kpts.push_back(left_frame->get_pt_keypt(i));
+            left_img_descs.push_back(left_frame->get_dscpt_by_index(i));
+            left_img_kpts.push_back(left_frame->get_kpt_by_index(i));
             match_left_id.push_back(i);
         }
     }
@@ -195,8 +196,9 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
             if (match_id < 0) {
                 not_found_cnt += 1;
             } else {
-                double cur_dis = cv::norm(left_img_descs[i],
-                                          right_frame->get_pt_desc(match_id));
+                double cur_dis =
+                        cv::norm(left_img_descs[i],
+                                 right_frame->get_dscpt_by_index(match_id));
                 if (local_book.count(match_id)) {
                     double prev_dis = desc_dis[local_book[match_id]];
                     if (prev_dis <= cur_dis) {
@@ -209,7 +211,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                 inliers[i] = true;
                 desc_dis[i] = cur_dis;
                 match_right_id[i] = match_id;
-                right_img_kpts[i] = right_frame->get_pt_keypt(match_id);
+                right_img_kpts[i] = right_frame->get_kpt_by_index(match_id);
                 local_book[match_id] = i;
             }
         }
@@ -231,6 +233,8 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
     desc_dis = filter_by_mask(desc_dis, inliers);
     assert(match_left_id.size() == match_right_id.size());
 
+    /*
+    if (left_frame->get_id() >= 23 || right_frame->get_id() >= 23)
     {
         std::vector<cv::DMatch> matches;
         for (int i = 0; i < (int) match_right_id.size(); ++i) {
@@ -244,6 +248,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
         cv::imshow(title, outimg);
         cv::waitKey(0);
     }
+     */
 
     if (match_left_id.size() < 10) {
         log_debug_line("Not enough matched in reprojection.");
@@ -264,9 +269,8 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
     // update proj_res
     for (int i = 0; i < (int) match_right_id.size(); ++i) {
         int img_pt_index = match_right_id[i];
-        vo_id_t pt_id = left_frame->get_pt_id(match_left_id[i]);
-        proj_res.insert_info_check(img_pt_index, pt_id,
-                                   left_frame->get_pt_3dcoord(match_left_id[i]),
+        proj_res.insert_info_check(img_pt_index,
+                                   left_frame->get_map_pt(match_left_id[i]),
                                    desc_dis[i]);
     }
 }
@@ -508,9 +512,7 @@ void Frontend::tracking(const cv::Mat &image, double t) {
 
     for (auto &pair : proj_res) {
         if (!m_cur_frame->is_pt_set(pair.first)) {
-            float x = pair.second.coord(0, 0), y = pair.second.coord(1, 0),
-                  z = pair.second.coord(2, 0);
-            m_cur_frame->set_pt(pair.first, pair.second.id, x, y, z);
+            m_cur_frame->set_map_pt(pair.first, pair.second.map_pt);
         }
     }
 
@@ -545,7 +547,7 @@ void Frontend::reproj_pose_estimate(ReprojRes &proj_res, float reproj_th) {
     std::vector<int> seq_to_index;
     for (auto &pair : proj_res) {
         img_pts.push_back(m_cur_frame->get_kpts()[pair.first].pt);
-        map_pt_coords.push_back(pair.second.coord);
+        map_pt_coords.push_back(pair.second.map_pt->get_coord());
         seq_to_index.push_back(pair.first);
     }
     cv::Mat init_Rcw = m_cur_frame->get_Rcw().clone(),
@@ -586,8 +588,8 @@ void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
     kpts1.reserve(matches.size());
     kpts2.reserve(matches.size());
     for (auto &match : matches) {
-        kpts1.push_back(ref_frame->get_pt_keypt(match.queryIdx));
-        kpts2.push_back(m_cur_frame->get_pt_keypt(match.trainIdx));
+        kpts1.push_back(ref_frame->get_kpt_by_index(match.queryIdx));
+        kpts2.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx));
     }
     filter_match_key_pts(kpts1, kpts2, mask, 3);
     for (size_t i = 0; i < mask.size(); ++i) {
@@ -597,10 +599,9 @@ void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
             proj_res.erase(matches[i].trainIdx);
             if (ref_frame->is_pt_set(matches[i].queryIdx)) {
                 mask[i] = 0;
-                m_cur_frame->set_pt(
+                m_cur_frame->set_map_pt(
                         matches[i].trainIdx,
-                        ref_frame->get_pt_id(matches[i].queryIdx),
-                        ref_frame->get_pt_3dcoord(matches[i].queryIdx));
+                        ref_frame->get_map_pt(matches[i].queryIdx));
             } else {
                 mask[i] = 1;
             }
@@ -622,8 +623,9 @@ void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
         proj_pts1.reserve(matches.size());
         proj_pts2.reserve(matches.size());
         for (auto &match : matches) {
-            proj_pts1.push_back(ref_frame->get_pt_keypt(match.queryIdx).pt);
-            proj_pts2.push_back(m_cur_frame->get_pt_keypt(match.trainIdx).pt);
+            proj_pts1.push_back(ref_frame->get_kpt_by_index(match.queryIdx).pt);
+            proj_pts2.push_back(
+                    m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
         }
         cv::triangulatePoints(proj_mat1, proj_mat2, proj_pts1, proj_pts2,
                               tri_res);
@@ -642,7 +644,7 @@ void Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
                                   const std::vector<bool> &inliers) {
     assert(new_tri_res.cols == (int) matches.size());
     assert(inliers.size() == matches.size());
-    std::vector<vo_uptr<MapPoint>> new_points;
+    std::vector<vo_ptr<MapPoint>> new_points;
     size_t total_new_pt = 0;
     for (size_t i = 0; i < matches.size(); ++i) {
         if (!inliers[i]) { continue; }
@@ -654,13 +656,11 @@ void Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
             float y = cur_point.at<float>(1);
             float z = cur_point.at<float>(2);
 
-            vo_uptr<MapPoint> cur_map_pt = std::make_unique<MapPoint>(
+            vo_ptr<MapPoint> cur_map_pt = std::make_shared<MapPoint>(
                     MapPoint::create_map_point(x, y, z));
-            ref_frame->set_pt(matches[i].queryIdx, cur_map_pt->get_id(), x, y,
-                              z);
-            m_cur_frame->set_pt(matches[i].trainIdx, cur_map_pt->get_id(), x, y,
-                                z);
-            new_points.push_back(std::move(cur_map_pt));
+            ref_frame->set_map_pt(matches[i].queryIdx, cur_map_pt);
+            m_cur_frame->set_map_pt(matches[i].trainIdx, cur_map_pt);
+            new_points.push_back(cur_map_pt);
             total_new_pt += 1;
         }
     }

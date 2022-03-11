@@ -12,13 +12,25 @@ public:
 
     [[nodiscard]] vo_id_t get_id() const { return m_id; }
 
+    [[nodiscard]] const cv::Mat& get_coord() const {
+        assert(m_coord.type() == CV_32F);
+        assert(m_coord.cols == 1);
+        assert(m_coord.rows == 3);
+        return m_coord;
+    }
+
 private:
     static vo_id_t map_point_id_cnt;
-    MapPoint(vo_id_t id, float x, float y, float z): m_id(id), m_coord(x, y, z) {}
+    MapPoint(vo_id_t id, float x, float y, float z) : m_id(id) {
+        m_coord = cv::Mat(3, 1, CV_32F);
+        m_coord.at<float>(0, 0) = x;
+        m_coord.at<float>(1, 0) = y;
+        m_coord.at<float>(2, 0) = z;
+    }
 
     vo_id_t m_id;
-    cv::Matx31f m_coord;
+    cv::Mat m_coord;
 };
-}
+}// namespace vo_nono
 
 #endif//VO_NONO_POINT_H

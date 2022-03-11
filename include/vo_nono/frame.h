@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "vo_nono/camera.h"
+#include "vo_nono/point.h"
 #include "vo_nono/types.h"
 #include "vo_nono/util.h"
 
@@ -30,7 +31,7 @@ public:
     [[nodiscard]] const std::vector<cv::KeyPoint> &get_kpts() const {
         return m_kpts;
     }
-    [[nodiscard]] size_t get_set_cnt() const { return m_set_cnt; }
+    [[nodiscard]] size_t get_set_cnt() const { return m_pt_mappt.size(); }
 
     void set_Rcw(const cv::Mat &Rcw) {
         assert(Rcw.rows == 3);
@@ -70,50 +71,28 @@ public:
         return pose;
     }
 
-    void set_pt(int i, vo_id_t id, float x, float y, float z) {
-        assert(m_pt_id.count(i) == 0);
-        m_pt_id.insert({i, PointCache(id, x, y, z)});
-        m_set_cnt += 1;
+    void set_map_pt(int i, const std::shared_ptr<MapPoint> &pt) {
+        assert(m_pt_mappt.count(i) == 0);
+        m_pt_mappt.insert({i, pt});
     }
-    void set_pt(int i, vo_id_t id, const cv::Mat &coord) {
-        assert(m_pt_id.count(i) == 0);
-        m_pt_id.insert(
-                {i, PointCache(id, coord.at<float>(0, 0), coord.at<float>(1, 0),
-                               coord.at<float>(2, 0))});
-        m_set_cnt += 1;
+    std::shared_ptr<MapPoint> get_map_pt(int i) const {
+        assert(m_pt_mappt.count(i) != 0);
+        return m_pt_mappt.at(i);
     }
-    cv::Mat get_pt_3dcoord(int i) const {
-        assert(m_pt_id.count(i) != 0);
-        return m_pt_id.at(i).coord;
-    }
-    vo_id_t get_pt_id(int i) const {
-        assert(m_pt_id.count(i) != 0);
-        return m_pt_id.at(i).id;
-    }
-    cv::KeyPoint get_pt_keypt(int i) const {
+    bool is_pt_set(int i) const { return m_pt_mappt.count(i) != 0; }
+
+    cv::KeyPoint get_kpt_by_index(int i) const {
         assert(i < (int) m_kpts.size());
         return m_kpts[i];
     }
-    cv::Mat get_pt_desc(int i) const {
+    cv::Mat get_dscpt_by_index(int i) const {
         assert(m_descriptor.rows > i);
         return m_descriptor.row(i);
     }
-    bool is_pt_set(int i) const { return m_pt_id.count(i) != 0; }
-
     int local_match(const cv::KeyPoint &other_pt, const cv::Mat &desc,
                     const cv::Point2f &pos, float dist_th);
 
 private:
-    struct PointCache {
-        vo_id_t id;
-        cv::Mat coord;
-        PointCache(vo_id_t id, float x, float y, float z) : id(id) {
-            coord = cv::Mat(3, 1, CV_32F);
-            coord.at<float>(0, 0) = x;
-            coord.at<float>(0, 1) = y;
-            coord.at<float>(0, 2) = z;
-        }
-    };
     constexpr static int WIDTH_TOTAL_GRID = 20;
     constexpr static int HEIGHT_TOTAL_GRID = 20;
 
@@ -142,7 +121,6 @@ private:
           m_time(time),
           m_Rcw(std::move(Rcw)),
           m_Tcw(std::move(Tcw)),
-          m_set_cnt(0),
           m_height(height),
           m_width(width),
           m_height_per_grid(std::ceil(height / HEIGHT_TOTAL_GRID)),
@@ -162,10 +140,8 @@ private:
     cv::Mat m_Rcw;
     cv::Mat m_Tcw;
 
-    // from index of m_kpts to points' ID and coordinate
-    std::unordered_map<int, PointCache> m_pt_id;
-    // number of points that already have 3d coordinates.
-    size_t m_set_cnt;
+    // from index of m_kpts to map points
+    std::unordered_map<int, std::shared_ptr<MapPoint>> m_pt_mappt;
 
     // accelerate local search
     float m_height, m_width;

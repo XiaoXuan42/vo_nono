@@ -74,10 +74,9 @@ private:
                             const cv::Mat &new_tri_res,
                             const std::vector<cv::DMatch> &matches,
                             const std::vector<bool> &inliers);
-    void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
+    void insert_map_points(std::vector<vo_ptr<MapPoint>> &points) {
         if (m_map) { m_map->insert_map_points(points); }
     }
-
 
 private:
     FrontendConfig m_config;
