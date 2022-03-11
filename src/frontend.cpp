@@ -164,7 +164,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                 continue;
             }
             proj_right_img_pts.emplace_back(img_x, img_y);
-            left_img_descs.push_back(left_frame->get_dscpt_by_index(i));
+            left_img_descs.push_back(left_frame->get_desc_by_index(i));
             left_img_kpts.push_back(left_frame->get_kpt_by_index(i));
             match_left_id.push_back(i);
         }
@@ -191,14 +191,13 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
         for (int i = 0; i < (int) match_left_id.size(); ++i) {
             inliers[i] = false;
             int match_id = right_frame->local_match(
-                    left_img_kpts[i], left_img_descs[i], proj_right_img_pts[i],
-                    r_th);
+                    left_img_descs[i], proj_right_img_pts[i], r_th);
             if (match_id < 0) {
                 not_found_cnt += 1;
             } else {
                 double cur_dis =
                         cv::norm(left_img_descs[i],
-                                 right_frame->get_dscpt_by_index(match_id));
+                                 right_frame->get_desc_by_index(match_id));
                 if (local_book.count(match_id)) {
                     double prev_dis = desc_dis[local_book[match_id]];
                     if (prev_dis <= cur_dis) {
@@ -233,9 +232,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
     desc_dis = filter_by_mask(desc_dis, inliers);
     assert(match_left_id.size() == match_right_id.size());
 
-    /*
-    if (left_frame->get_id() >= 23 || right_frame->get_id() >= 23)
-    {
+    if (left_frame->get_id() >= 34 || right_frame->get_id() >= 34) {
         std::vector<cv::DMatch> matches;
         for (int i = 0; i < (int) match_right_id.size(); ++i) {
             matches.emplace_back(i, i, 0);
@@ -248,7 +245,6 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
         cv::imshow(title, outimg);
         cv::waitKey(0);
     }
-     */
 
     if (match_left_id.size() < 10) {
         log_debug_line("Not enough matched in reprojection.");
@@ -261,7 +257,6 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
     match_left_id = filter_by_mask(match_left_id, inliers2);
     match_right_id = filter_by_mask(match_right_id, inliers2);
     desc_dis = filter_by_mask(desc_dis, inliers2);
-
     assert(left_img_kpts.size() == right_img_kpts.size());
     assert(match_left_id.size() == match_right_id.size());
     assert(left_img_kpts.size() == match_right_id.size());
@@ -273,6 +268,15 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                                    left_frame->get_map_pt(match_left_id[i]),
                                    desc_dis[i]);
     }
+}
+
+cv::Point2f reproj_point(const cv::Mat &proj_mat, const cv::Mat &coord_3d) {
+    cv::Mat hm_coord = cv::Mat(4, 1, CV_32F);
+    coord_3d.copyTo(hm_coord.rowRange(0, 3));
+    hm_coord.at<float>(3, 0) = 1.0f;
+    cv::Mat proj_img = proj_mat * coord_3d;
+    proj_img /= proj_img.at<float>(2, 0);
+    return cv::Point2f(proj_img.at<float>(0, 0), proj_img.at<float>(1, 0));
 }
 }// namespace
 
@@ -429,7 +433,7 @@ void Frontend::initialize(const cv::Mat &image, double t) {
     cv::Mat dscpts;
     detect_and_compute(image, kpts, dscpts, 1000);
     std::vector<cv::DMatch> matches;
-    matches = match_descriptor(m_keyframe->get_dscpts(), dscpts, 8, 15, 100);
+    matches = match_descriptor(m_keyframe->get_descs(), dscpts, 8, 15, 100);
 
     const std::vector<cv::KeyPoint> &prev_kpts = m_keyframe->get_kpts();
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
@@ -582,7 +586,7 @@ void Frontend::reproj_pose_estimate(ReprojRes &proj_res, float reproj_th) {
 void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
                            ReprojRes &proj_res) {
     std::vector<cv::DMatch> matches = match_descriptor(
-            ref_frame->get_dscpts(), m_cur_frame->get_dscpts(), 8, 15, 100);
+            ref_frame->get_descs(), m_cur_frame->get_descs(), 8, 15, 100);
     std::vector<unsigned char> mask;
     std::vector<cv::KeyPoint> kpts1, kpts2;
     kpts1.reserve(matches.size());
@@ -657,7 +661,9 @@ void Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
             float z = cur_point.at<float>(2);
 
             vo_ptr<MapPoint> cur_map_pt = std::make_shared<MapPoint>(
-                    MapPoint::create_map_point(x, y, z));
+                    MapPoint::create_map_point(x, y, z,
+                                               m_cur_frame->get_desc_by_index(
+                                                       matches[i].trainIdx)));
             ref_frame->set_map_pt(matches[i].queryIdx, cur_map_pt);
             m_cur_frame->set_map_pt(matches[i].trainIdx, cur_map_pt);
             new_points.push_back(cur_map_pt);
@@ -666,5 +672,38 @@ void Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
     }
     insert_map_points(new_points);
     log_debug_line("New map points: " << total_new_pt);
+}
+
+void Frontend::select_new_keyframe(const vo_ptr<Frame> &new_keyframe) {
+    assert(m_window_frame.size() <= 5);
+    if (m_window_frame.size() == 5) {
+        vo_ptr<Frame> old_frame = m_window_frame.front();
+        m_window_frame.pop_front();
+
+        for (size_t i = 0; i < old_frame->get_kpt_cnt(); ++i) {
+            vo_ptr<MapPoint> map_pt = old_frame->get_map_pt((int) i);
+            vo_id_t pt_id = map_pt->get_id();
+            assert(m_local_points.count(pt_id));
+            auto iter = m_local_points.find(pt_id);
+            int refcnt = iter->second.first;
+            assert(refcnt >= 1);
+            if (refcnt == 1) {
+                m_local_points.erase(iter);
+            } else {
+                iter->second.first -= 1;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < new_keyframe->get_kpt_cnt(); ++i) {
+        vo_ptr<MapPoint> map_pt = new_keyframe->get_map_pt((int) i);
+        vo_id_t pt_id = map_pt->get_id();
+        auto iter = m_local_points.find(pt_id);
+        if (iter == m_local_points.end()) {
+            m_local_points[pt_id] = std::make_pair(1, map_pt);
+        } else {
+            iter->second.first += 1;
+        }
+    }
 }
 }// namespace vo_nono

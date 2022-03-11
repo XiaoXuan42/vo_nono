@@ -1,6 +1,8 @@
 #ifndef VO_NONO_FRONTEND_H
 #define VO_NONO_FRONTEND_H
 
+#include <list>
+#include <map>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/features2d.hpp>
@@ -68,6 +70,7 @@ private:
     void tracking(const cv::Mat &image, double t);
     void reproj_with_motion(ReprojRes &proj_res);
     void reproj_with_keyframe(ReprojRes &proj_res);
+    void reproj_with_local_points(ReprojRes &proj_res);
     void reproj_pose_estimate(ReprojRes &proj_res, float reproj_th);
     void triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res);
     void set_new_map_points(const vo_ptr<Frame> &ref_frame,
@@ -78,6 +81,8 @@ private:
         if (m_map) { m_map->insert_map_points(points); }
     }
 
+    void select_new_keyframe(const vo_ptr<Frame> &new_keyframe);
+
 private:
     FrontendConfig m_config;
     Camera m_camera;
@@ -86,6 +91,9 @@ private:
     vo_ptr<Frame> m_keyframe;
     vo_ptr<Frame> m_cur_frame;
     vo_ptr<Frame> m_last_frame;
+    std::list<vo_ptr<Frame>> m_window_frame;
+    std::map<vo_id_t, std::pair<int, vo_ptr<MapPoint>>> m_local_points;
+
     vo_ptr<Map> m_map;
 
     MotionPredictor m_motion_pred;

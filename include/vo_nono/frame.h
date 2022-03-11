@@ -27,11 +27,13 @@ public:
 
     [[nodiscard]] vo_id_t get_id() const { return m_id; }
     [[nodiscard]] double get_time() const { return m_time; }
-    [[nodiscard]] cv::Mat get_dscpts() const { return m_descriptor; }
+    [[nodiscard]] cv::Mat get_descs() const { return m_descriptor; }
     [[nodiscard]] const std::vector<cv::KeyPoint> &get_kpts() const {
         return m_kpts;
     }
+    // keypoints that already has corresponding map point
     [[nodiscard]] size_t get_set_cnt() const { return m_pt_mappt.size(); }
+    [[nodiscard]] size_t get_kpt_cnt() const { return m_kpts.size(); }
 
     void set_Rcw(const cv::Mat &Rcw) {
         assert(Rcw.rows == 3);
@@ -85,12 +87,12 @@ public:
         assert(i < (int) m_kpts.size());
         return m_kpts[i];
     }
-    cv::Mat get_dscpt_by_index(int i) const {
+    cv::Mat get_desc_by_index(int i) const {
         assert(m_descriptor.rows > i);
         return m_descriptor.row(i);
     }
-    int local_match(const cv::KeyPoint &other_pt, const cv::Mat &desc,
-                    const cv::Point2f &pos, float dist_th);
+    int local_match(const cv::Mat &desc, const cv::Point2f &pos,
+                    const float dist_th);
 
 private:
     constexpr static int WIDTH_TOTAL_GRID = 20;

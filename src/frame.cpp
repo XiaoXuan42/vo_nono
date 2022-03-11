@@ -17,8 +17,8 @@ Frame Frame::create_frame(cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
                  camera.get_width());
 }
 
-int Frame::local_match(const cv::KeyPoint& other_pt, const cv::Mat& desc,
-                       const cv::Point2f& pos, const float dist_th) {
+int Frame::local_match(const cv::Mat& desc, const cv::Point2f& pos,
+                       const float dist_th) {
     if (pos.x < 0 || pos.x > m_width || pos.y < 0 || pos.y > m_height) {
         return -1;
     }
