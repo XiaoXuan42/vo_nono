@@ -20,6 +20,8 @@ public:
         return m_coord;
     }
 
+    [[nodiscard]] const cv::Mat& get_desc() const { return m_desc; }
+
 private:
     static vo_id_t map_point_id_cnt;
     MapPoint(vo_id_t id, float x, float y, float z, cv::Mat desc)

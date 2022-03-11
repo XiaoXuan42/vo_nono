@@ -17,7 +17,7 @@ Frame Frame::create_frame(cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
                  camera.get_width());
 }
 
-int Frame::local_match(const cv::Mat& desc, const cv::Point2f& pos,
+int Frame::local_match(const cv::Mat& desc, const cv::Point2f& pos, double& dis,
                        const float dist_th) {
     if (pos.x < 0 || pos.x > m_width || pos.y < 0 || pos.y > m_height) {
         return -1;
@@ -52,6 +52,7 @@ int Frame::local_match(const cv::Mat& desc, const cv::Point2f& pos,
     }
     // ratio test
     if (min_dis >= 20 || min_dis >= second_min_dis * 0.8) { return -1; }
+    dis = min_dis;
     return min_index;
 }
 }// namespace vo_nono

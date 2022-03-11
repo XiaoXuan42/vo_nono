@@ -91,7 +91,7 @@ public:
         assert(m_descriptor.rows > i);
         return m_descriptor.row(i);
     }
-    int local_match(const cv::Mat &desc, const cv::Point2f &pos,
+    int local_match(const cv::Mat &desc, const cv::Point2f &pos, double &dis,
                     const float dist_th);
 
 private:

@@ -190,14 +190,12 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
 
         for (int i = 0; i < (int) match_left_id.size(); ++i) {
             inliers[i] = false;
+            double cur_dis;
             int match_id = right_frame->local_match(
-                    left_img_descs[i], proj_right_img_pts[i], r_th);
+                    left_img_descs[i], proj_right_img_pts[i], cur_dis, r_th);
             if (match_id < 0) {
                 not_found_cnt += 1;
             } else {
-                double cur_dis =
-                        cv::norm(left_img_descs[i],
-                                 right_frame->get_desc_by_index(match_id));
                 if (local_book.count(match_id)) {
                     double prev_dis = desc_dis[local_book[match_id]];
                     if (prev_dis <= cur_dis) {
@@ -486,6 +484,7 @@ void Frontend::initialize(const cv::Mat &image, double t) {
                                          << "T: " << std::endl
                                          << t_cw << std::endl);
     set_new_map_points(m_keyframe, tri_res, matches, inliers);
+    select_new_keyframe(m_keyframe);
 }
 
 void Frontend::tracking(const cv::Mat &image, double t) {
@@ -581,6 +580,25 @@ void Frontend::reproj_pose_estimate(ReprojRes &proj_res, float reproj_th) {
     Rcw.convertTo(Rcw, CV_32F);
     tcw.convertTo(tcw, CV_32F);
     m_cur_frame->set_pose(Rcw, tcw);
+}
+
+void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
+    cv::Mat proj_mat =
+            get_proj_mat(m_camera.get_intrinsic_mat(), m_cur_frame->get_Rcw(),
+                         m_cur_frame->get_Tcw());
+    for (auto &pair : m_local_points) {
+        vo_ptr<MapPoint> map_pt = pair.second.second;
+        cv::Point2f pt = reproj_point(proj_mat, map_pt->get_coord());
+        if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || pt.x < 0 ||
+            pt.x > m_camera.get_width() || pt.y < 0 ||
+            pt.y > m_camera.get_height()) {
+            continue;
+        }
+
+        double dis;
+        int index = m_cur_frame->local_match(map_pt->get_desc(), pt, dis, 6.0f);
+        if (index > 0) { proj_res.insert_info_check(index, map_pt, dis); }
+    }
 }
 
 void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
@@ -696,14 +714,20 @@ void Frontend::select_new_keyframe(const vo_ptr<Frame> &new_keyframe) {
     }
 
     for (size_t i = 0; i < new_keyframe->get_kpt_cnt(); ++i) {
-        vo_ptr<MapPoint> map_pt = new_keyframe->get_map_pt((int) i);
-        vo_id_t pt_id = map_pt->get_id();
-        auto iter = m_local_points.find(pt_id);
-        if (iter == m_local_points.end()) {
-            m_local_points[pt_id] = std::make_pair(1, map_pt);
-        } else {
-            iter->second.first += 1;
+        if (new_keyframe->is_pt_set((int)i)) {
+            vo_ptr<MapPoint> map_pt = new_keyframe->get_map_pt((int) i);
+            vo_id_t pt_id = map_pt->get_id();
+            auto iter = m_local_points.find(pt_id);
+            if (iter == m_local_points.end()) {
+                m_local_points[pt_id] = std::make_pair(1, map_pt);
+            } else {
+                iter->second.first += 1;
+            }
         }
     }
+
+    m_keyframe = new_keyframe;
+    log_debug_line("New key frame: " << m_keyframe->get_id());
+    log_debug_line("Local map points: " << m_local_points.size());
 }
 }// namespace vo_nono
