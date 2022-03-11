@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "vo_nono/camera.h"
 #include "vo_nono/types.h"
 #include "vo_nono/util.h"
 
@@ -18,7 +19,8 @@ public:
 
 public:
     static Frame create_frame(cv::Mat descriptor,
-                              std::vector<cv::KeyPoint> kpts, double time,
+                              std::vector<cv::KeyPoint> kpts,
+                              const Camera &camera, double time,
                               cv::Mat Rcw = cv::Mat::eye(3, 3, CV_32F),
                               cv::Mat Tcw = cv::Mat::zeros(3, 1, CV_32F));
 
@@ -73,6 +75,13 @@ public:
         m_pt_id.insert({i, PointCache(id, x, y, z)});
         m_set_cnt += 1;
     }
+    void set_pt(int i, vo_id_t id, const cv::Mat &coord) {
+        assert(m_pt_id.count(i) == 0);
+        m_pt_id.insert(
+                {i, PointCache(id, coord.at<float>(0, 0), coord.at<float>(1, 0),
+                               coord.at<float>(2, 0))});
+        m_set_cnt += 1;
+    }
     cv::Mat get_pt_3dcoord(int i) const {
         assert(m_pt_id.count(i) != 0);
         return m_pt_id.at(i).coord;
@@ -105,17 +114,45 @@ private:
             coord.at<float>(0, 2) = z;
         }
     };
+    constexpr static int WIDTH_TOTAL_GRID = 20;
+    constexpr static int HEIGHT_TOTAL_GRID = 20;
+
     static vo_id_t frame_id_cnt;
 
+    inline int get_grid_width_id(float x) const {
+        return int(x / m_width_per_grid);
+    }
+
+    inline int get_grid_height_id(float y) const {
+        return int(y / m_height_per_grid);
+    }
+
+    inline int get_grid_id(float x, float y) const {
+        int w_id = get_grid_width_id(x), h_id = get_grid_height_id(y);
+        assert(w_id <= WIDTH_TOTAL_GRID);
+        assert(h_id <= HEIGHT_TOTAL_GRID);
+        return h_id * WIDTH_TOTAL_GRID + w_id;
+    }
+
     Frame(vo_id_t id, cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
-          double time, cv::Mat Rcw, cv::Mat Tcw)
+          double time, cv::Mat Rcw, cv::Mat Tcw, float height, float width)
         : m_id(id),
           m_descriptor(std::move(descriptor)),
           m_kpts(std::move(kpts)),
           m_time(time),
           m_Rcw(std::move(Rcw)),
           m_Tcw(std::move(Tcw)),
-          m_set_cnt(0) {}
+          m_set_cnt(0),
+          m_height(height),
+          m_width(width),
+          m_height_per_grid(std::ceil(height / HEIGHT_TOTAL_GRID)),
+          m_width_per_grid(std::ceil(width / WIDTH_TOTAL_GRID)),
+          m_grid_to_index((HEIGHT_TOTAL_GRID + 1) * (WIDTH_TOTAL_GRID + 1)) {
+        for (size_t i = 0; i < m_kpts.size(); ++i) {
+            int cur_id = get_grid_id(m_kpts[i].pt.x, m_kpts[i].pt.y);
+            m_grid_to_index[cur_id].push_back((int) i);
+        }
+    }
 
     vo_id_t m_id;
     cv::Mat m_descriptor;
@@ -129,6 +166,11 @@ private:
     std::unordered_map<int, PointCache> m_pt_id;
     // number of points that already have 3d coordinates.
     size_t m_set_cnt;
+
+    // accelerate local search
+    float m_height, m_width;
+    const float m_height_per_grid, m_width_per_grid;
+    std::vector<std::vector<int>> m_grid_to_index;
 };
 }// namespace vo_nono
 
