@@ -69,11 +69,11 @@ private:
     void reproj_with_motion(ReprojRes &proj_res);
     void reproj_with_keyframe(ReprojRes &proj_res);
     void reproj_pose_estimate(ReprojRes &proj_res, float reproj_th);
-    void triangulate_with_keyframe(const ReprojRes &proj_res);
-    void set_new_map_points(const cv::Mat &new_tri_res,
-                          const std::vector<cv::DMatch> &matches,
-                          const std::vector<bool> &inliers);
-    void _try_switch_keyframe(size_t new_pt, size_t old_pt);
+    void triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res);
+    void set_new_map_points(const vo_ptr<Frame> &ref_frame,
+                            const cv::Mat &new_tri_res,
+                            const std::vector<cv::DMatch> &matches,
+                            const std::vector<bool> &inliers);
     void insert_map_points(std::vector<vo_uptr<MapPoint>> &points) {
         if (m_map) { m_map->insert_map_points(points); }
     }
