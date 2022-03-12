@@ -99,9 +99,9 @@ private:
 };
 
 namespace {
-void filter_match_key_pts(const std::vector<cv::KeyPoint> &kpts1,
-                          const std::vector<cv::KeyPoint> &kpts2,
-                          std::vector<unsigned char> &mask, const int topK) {
+void filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
+                            const std::vector<cv::KeyPoint> &kpts2,
+                            std::vector<unsigned char> &mask, const int topK) {
     assert(kpts1.size() == kpts2.size());
     auto ang_diff_index = [](double diff_ang) {
         if (diff_ang < 0) { diff_ang += 360; }
@@ -230,7 +230,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
     desc_dis = filter_by_mask(desc_dis, inliers);
     assert(match_left_id.size() == match_right_id.size());
 
-    if (left_frame->get_id() >= 34 || right_frame->get_id() >= 34) {
+    if (left_frame->get_id() >= 214) {
         std::vector<cv::DMatch> matches;
         for (int i = 0; i < (int) match_right_id.size(); ++i) {
             matches.emplace_back(i, i, 0);
@@ -249,7 +249,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
         return;
     }
     std::vector<unsigned char> inliers2;
-    filter_match_key_pts(left_img_kpts, right_img_kpts, inliers2, 4);
+    filter_match_with_kpts(left_img_kpts, right_img_kpts, inliers2, 4);
     left_img_kpts = filter_by_mask(left_img_kpts, inliers2);
     right_img_kpts = filter_by_mask(right_img_kpts, inliers2);
     match_left_id = filter_by_mask(match_left_id, inliers2);
@@ -272,7 +272,7 @@ cv::Point2f reproj_point(const cv::Mat &proj_mat, const cv::Mat &coord_3d) {
     cv::Mat hm_coord = cv::Mat(4, 1, CV_32F);
     coord_3d.copyTo(hm_coord.rowRange(0, 3));
     hm_coord.at<float>(3, 0) = 1.0f;
-    cv::Mat proj_img = proj_mat * coord_3d;
+    cv::Mat proj_img = proj_mat * hm_coord;
     proj_img /= proj_img.at<float>(2, 0);
     return cv::Point2f(proj_img.at<float>(0, 0), proj_img.at<float>(1, 0));
 }
@@ -336,7 +336,7 @@ std::vector<cv::DMatch> Frontend::filter_matches(
     }
 
     std::vector<unsigned char> mask;
-    filter_match_key_pts(match_kp1, match_kp2, mask, topK);
+    filter_match_with_kpts(match_kp1, match_kp2, mask, topK);
     return filter_by_mask(matches, mask);
 }
 
@@ -395,6 +395,7 @@ void Frontend::filter_triangulate_points(
 }
 
 void Frontend::get_image(const cv::Mat &image, double t) {
+    bool ok = false;
     m_last_frame = m_cur_frame;
     if (m_state == State::Start) {
         assert(!m_keyframe);
@@ -407,23 +408,31 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 
         m_map->insert_key_frame(m_keyframe);
         m_state = State::Initializing;
+        ok = true;
     } else if (m_state == State::Initializing) {
         assert(m_keyframe);
         initialize(image, t);
 
         m_map->insert_key_frame(m_cur_frame);
         m_state = State::Tracking;
+        ok = true;
     } else if (m_state == State::Tracking) {
         assert(m_keyframe);
-        tracking(image, t);
-        m_map->insert_key_frame(m_cur_frame);
+        if (tracking(image, t)) {
+            m_map->insert_key_frame(m_cur_frame);
+            ok = true;
+        } else {
+            m_cur_frame = m_last_frame;
+        }
     } else {
         unimplemented();
     }
     assert(m_cur_frame);
-    m_cur_frame->img = image;
-    m_motion_pred.inform_pose(m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw(),
-                              m_cur_frame->get_time());
+    if (ok) {
+        m_motion_pred.inform_pose(m_cur_frame->get_Rcw(),
+                                  m_cur_frame->get_Tcw(),
+                                  m_cur_frame->get_time());
+    }
 }
 
 void Frontend::initialize(const cv::Mat &image, double t) {
@@ -487,7 +496,7 @@ void Frontend::initialize(const cv::Mat &image, double t) {
     select_new_keyframe(m_keyframe);
 }
 
-void Frontend::tracking(const cv::Mat &image, double t) {
+bool Frontend::tracking(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
     detect_and_compute(image, kpts, dscpts, 500),
@@ -498,24 +507,45 @@ void Frontend::tracking(const cv::Mat &image, double t) {
     // todo: relocalization(both model fails)
     // todo: camera dist coeff?
     ReprojRes proj_res;
+    m_cur_frame->set_pose(m_last_frame->get_Rcw(), m_last_frame->get_Tcw());
     reproj_with_motion(proj_res);
-    log_debug_line("Motion model select " << proj_res.size() << " points.");
     if (proj_res.size() < 10) {
-        // motion model is totally abandoned
-        proj_res.clear();
         log_debug_line("Motion model totally abandoned.");
+        proj_res.clear();
         m_cur_frame->set_pose(m_last_frame->get_Rcw(), m_last_frame->get_Tcw());
     }
-    if (proj_res.size() < 40) { reproj_with_keyframe(proj_res); }
+    log_debug_line(m_local_points.size() << " local points.");
+    reproj_with_local_points(proj_res);
+    int cnt_proj_succ = (int) proj_res.size();
+    log_debug_line("Projected " << cnt_proj_succ << " points.");
+
+    if (proj_res.size() < 10) {
+        std::cerr << "Oh no! May be motion blur!" << std::endl;
+        std::string title = "image " + std::to_string(m_cur_frame->get_id());
+        cv::imshow(title, m_cur_frame->img);
+        cv::waitKey(0);
+        log_debug_line("Track missing. Discard this frame.");
+        return false;
+    }
 
     log_debug_line("Pose estimate with " << proj_res.size() << " points.");
-    reproj_pose_estimate(proj_res, 2);
+    reproj_pose_estimate(proj_res, 1);
     log_debug_line("Pose estimated with " << proj_res.size() << " left.");
-    triangulate(m_keyframe, proj_res);
+    int cnt_new_pts = triangulate(m_keyframe, proj_res);
+    log_debug_line("Generate " << cnt_new_pts << " new map points.");
 
     for (auto &pair : proj_res) {
         if (!m_cur_frame->is_pt_set(pair.first)) {
             m_cur_frame->set_map_pt(pair.first, pair.second.map_pt);
+        }
+    }
+
+    if (cnt_new_pts <= 10 ||
+        m_cur_frame->get_id() > m_keyframe->get_id() + 20) {
+        if (m_last_frame->get_kpt_cnt() > m_cur_frame->get_kpt_cnt()) {
+            select_new_keyframe(m_last_frame);
+        } else {
+            select_new_keyframe(m_cur_frame);
         }
     }
 
@@ -525,10 +555,7 @@ void Frontend::tracking(const cv::Mat &image, double t) {
                    << m_cur_frame->get_Tcw() << std::endl);
     log_debug_line("Frame has " << m_cur_frame->get_set_cnt()
                                 << " points set.");
-}
-
-void Frontend::reproj_with_keyframe(ReprojRes &proj_res) {
-    reproj_points_from_frame(m_keyframe, m_cur_frame, m_camera, proj_res);
+    return true;
 }
 
 void Frontend::reproj_with_motion(ReprojRes &proj_res) {
@@ -596,13 +623,14 @@ void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
         }
 
         double dis;
-        int index = m_cur_frame->local_match(map_pt->get_desc(), pt, dis, 6.0f);
+        int index =
+                m_cur_frame->local_match(map_pt->get_desc(), pt, dis, 12.0f);
         if (index > 0) { proj_res.insert_info_check(index, map_pt, dis); }
     }
 }
 
-void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
-                           ReprojRes &proj_res) {
+int Frontend::triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res) {
+    int total_new_pts = 0;
     std::vector<cv::DMatch> matches = match_descriptor(
             ref_frame->get_descs(), m_cur_frame->get_descs(), 8, 15, 100);
     std::vector<unsigned char> mask;
@@ -613,7 +641,7 @@ void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
         kpts1.push_back(ref_frame->get_kpt_by_index(match.queryIdx));
         kpts2.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx));
     }
-    filter_match_key_pts(kpts1, kpts2, mask, 3);
+    filter_match_with_kpts(kpts1, kpts2, mask, 3);
     for (size_t i = 0; i < mask.size(); ++i) {
         if (!mask[i]) { continue; }
         if (proj_res.is_better_match(matches[i].trainIdx,
@@ -656,18 +684,30 @@ void Frontend::triangulate(const vo_ptr<Frame> &ref_frame,
                                   ref_frame->get_Tcw(), m_cur_frame->get_Rcw(),
                                   m_cur_frame->get_Tcw(), proj_pts1, proj_pts2,
                                   inliers);
-        set_new_map_points(ref_frame, tri_res, matches, inliers);
+        total_new_pts =
+                set_new_map_points(ref_frame, tri_res, matches, inliers);
+    } else {
+        total_new_pts = 0;
     }
+    return total_new_pts;
 }
 
-void Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
-                                  const cv::Mat &new_tri_res,
-                                  const std::vector<cv::DMatch> &matches,
-                                  const std::vector<bool> &inliers) {
+int Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
+                                 const cv::Mat &new_tri_res,
+                                 const std::vector<cv::DMatch> &matches,
+                                 const std::vector<bool> &inliers) {
     assert(new_tri_res.cols == (int) matches.size());
     assert(inliers.size() == matches.size());
     std::vector<vo_ptr<MapPoint>> new_points;
-    size_t total_new_pt = 0;
+    bool b_in_local = false;
+    for (auto &w_frame : m_window_frame) {
+        if (w_frame->get_id() == ref_frame->get_id()) {
+            b_in_local = true;
+            break;
+        }
+    }
+
+    int total_new_pt = 0;
     for (size_t i = 0; i < matches.size(); ++i) {
         if (!inliers[i]) { continue; }
         cv::Mat cur_point = new_tri_res.col((int) i);
@@ -686,10 +726,12 @@ void Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
             m_cur_frame->set_map_pt(matches[i].trainIdx, cur_map_pt);
             new_points.push_back(cur_map_pt);
             total_new_pt += 1;
+
+            if (b_in_local) { set_local_map_point(cur_map_pt); }
         }
     }
     insert_map_points(new_points);
-    log_debug_line("New map points: " << total_new_pt);
+    return total_new_pt;
 }
 
 void Frontend::select_new_keyframe(const vo_ptr<Frame> &new_keyframe) {
@@ -699,33 +741,21 @@ void Frontend::select_new_keyframe(const vo_ptr<Frame> &new_keyframe) {
         m_window_frame.pop_front();
 
         for (size_t i = 0; i < old_frame->get_kpt_cnt(); ++i) {
-            vo_ptr<MapPoint> map_pt = old_frame->get_map_pt((int) i);
-            vo_id_t pt_id = map_pt->get_id();
-            assert(m_local_points.count(pt_id));
-            auto iter = m_local_points.find(pt_id);
-            int refcnt = iter->second.first;
-            assert(refcnt >= 1);
-            if (refcnt == 1) {
-                m_local_points.erase(iter);
-            } else {
-                iter->second.first -= 1;
+            if (old_frame->is_pt_set((int) i)) {
+                vo_id_t pt_id = old_frame->get_map_pt((int) i)->get_id();
+                unset_local_map_point(pt_id);
             }
         }
     }
 
     for (size_t i = 0; i < new_keyframe->get_kpt_cnt(); ++i) {
-        if (new_keyframe->is_pt_set((int)i)) {
+        if (new_keyframe->is_pt_set((int) i)) {
             vo_ptr<MapPoint> map_pt = new_keyframe->get_map_pt((int) i);
-            vo_id_t pt_id = map_pt->get_id();
-            auto iter = m_local_points.find(pt_id);
-            if (iter == m_local_points.end()) {
-                m_local_points[pt_id] = std::make_pair(1, map_pt);
-            } else {
-                iter->second.first += 1;
-            }
+            set_local_map_point(map_pt);
         }
     }
 
+    m_window_frame.push_back(new_keyframe);
     m_keyframe = new_keyframe;
     log_debug_line("New key frame: " << m_keyframe->get_id());
     log_debug_line("Local map points: " << m_local_points.size());
