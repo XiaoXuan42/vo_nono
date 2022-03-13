@@ -138,6 +138,15 @@ void filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
     }
 }
 
+cv::Point2f reproj_point(const cv::Mat &proj_mat, const cv::Mat &coord_3d) {
+    cv::Mat hm_coord = cv::Mat(4, 1, CV_32F);
+    coord_3d.copyTo(hm_coord.rowRange(0, 3));
+    hm_coord.at<float>(3, 0) = 1.0f;
+    cv::Mat proj_img = proj_mat * hm_coord;
+    proj_img /= proj_img.at<float>(2, 0);
+    return cv::Point2f(proj_img.at<float>(0, 0), proj_img.at<float>(1, 0));
+}
+
 void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                               const vo_ptr<Frame> &right_frame,
                               const Camera &camera, ReprojRes &proj_res) {
@@ -150,17 +159,9 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                          right_frame->get_Tcw());
     for (int i = 0; i < (int) left_frame->get_kpts().size(); ++i) {
         if (left_frame->is_pt_set(i)) {
-            cv::Mat coord = left_frame->get_map_pt(i)->get_coord();
-            cv::Mat hm_coord(4, 1, CV_32F);
-            coord.copyTo(hm_coord.rowRange(0, 3));
-            hm_coord.at<float>(3, 0) = 1.0f;
-
-            cv::Mat hm_img_pt = proj_mat * hm_coord;
-            const float scale = hm_img_pt.at<float>(0, 2);
-            if (!std::isfinite(scale)) { continue; }
-            hm_img_pt /= scale;
-            float img_x = hm_img_pt.at<float>(0, 0),
-                  img_y = hm_img_pt.at<float>(1, 0);
+            cv::Point2f img_pt = reproj_point(
+                    proj_mat, left_frame->get_map_pt(i)->get_coord());
+            float img_x = img_pt.x, img_y = img_pt.y;
             if (!std::isfinite(img_x) || img_x < 0 ||
                 img_x > camera.get_width() || !std::isfinite(img_y) ||
                 img_y < 0 || img_y > camera.get_height()) {
@@ -194,8 +195,9 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
         for (int i = 0; i < (int) match_left_id.size(); ++i) {
             inliers[i] = false;
             double cur_dis;
-            int match_id = right_frame->local_match(
-                    left_img_descs[i], proj_right_img_pts[i], cur_dis, r_th, 1.0);
+            int match_id = right_frame->local_match(left_img_descs[i],
+                                                    proj_right_img_pts[i],
+                                                    cur_dis, r_th, 1.0);
             if (match_id < 0) {
                 not_found_cnt += 1;
             } else {
@@ -271,15 +273,6 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                                    left_frame->get_map_pt(match_left_id[i]),
                                    desc_dis[i]);
     }
-}
-
-cv::Point2f reproj_point(const cv::Mat &proj_mat, const cv::Mat &coord_3d) {
-    cv::Mat hm_coord = cv::Mat(4, 1, CV_32F);
-    coord_3d.copyTo(hm_coord.rowRange(0, 3));
-    hm_coord.at<float>(3, 0) = 1.0f;
-    cv::Mat proj_img = proj_mat * hm_coord;
-    proj_img /= proj_img.at<float>(2, 0);
-    return cv::Point2f(proj_img.at<float>(0, 0), proj_img.at<float>(1, 0));
 }
 }// namespace
 
@@ -628,8 +621,8 @@ void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
         }
 
         double dis;
-        int index =
-                m_cur_frame->local_match(map_pt->get_desc(), pt, dis, 12.0f, 0.8);
+        int index = m_cur_frame->local_match(map_pt->get_desc(), pt, dis, 12.0f,
+                                             0.8);
         if (index > 0) {
             proj_res.insert_info_check(index, map_pt, dis);
         } else if (index == -1) {
