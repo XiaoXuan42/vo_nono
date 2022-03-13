@@ -18,9 +18,9 @@ Frame Frame::create_frame(cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
 }
 
 int Frame::local_match(const cv::Mat& desc, const cv::Point2f& pos, double& dis,
-                       const float dist_th) {
+                       const float dist_th, double lowe_th) {
     if (pos.x < 0 || pos.x > m_width || pos.y < 0 || pos.y > m_height) {
-        return -1;
+        return -3;
     }
     const float dist_th_square = dist_th * dist_th;
     float x_left_most = pos.x - dist_th, x_right_most = pos.x + dist_th;
@@ -50,9 +50,10 @@ int Frame::local_match(const cv::Mat& desc, const cv::Point2f& pos, double& dis,
             }
         }
     }
-    // ratio test
-    if (min_dis >= 20 || min_dis >= second_min_dis * 0.8) { return -1; }
     dis = min_dis;
+    if (min_dis >= second_min_dis * lowe_th) {
+        return -2;
+    }
     return min_index;
 }
 }// namespace vo_nono

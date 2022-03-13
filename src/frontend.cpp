@@ -14,6 +14,9 @@
 #ifndef NDEBUG
 #include <opencv2/features2d.hpp>
 #include <opencv2/highgui.hpp>
+
+//#define SHOW_IMGAGE 1
+#define START_IMAGE 150
 #endif
 
 namespace vo_nono {
@@ -192,7 +195,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
             inliers[i] = false;
             double cur_dis;
             int match_id = right_frame->local_match(
-                    left_img_descs[i], proj_right_img_pts[i], cur_dis, r_th);
+                    left_img_descs[i], proj_right_img_pts[i], cur_dis, r_th, 1.0);
             if (match_id < 0) {
                 not_found_cnt += 1;
             } else {
@@ -230,7 +233,8 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
     desc_dis = filter_by_mask(desc_dis, inliers);
     assert(match_left_id.size() == match_right_id.size());
 
-    if (left_frame->get_id() >= 214) {
+#ifdef SHOW_IMGAGE
+    if (left_frame->get_id() >= START_IMAGE) {
         std::vector<cv::DMatch> matches;
         for (int i = 0; i < (int) match_right_id.size(); ++i) {
             matches.emplace_back(i, i, 0);
@@ -243,6 +247,7 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
         cv::imshow(title, outimg);
         cv::waitKey(0);
     }
+#endif
 
     if (match_left_id.size() < 10) {
         log_debug_line("Not enough matched in reprojection.");
@@ -282,8 +287,7 @@ cv::Point2f reproj_point(const cv::Mat &proj_mat, const cv::Mat &coord_3d) {
 void Frontend::detect_and_compute(const cv::Mat &image,
                                   std::vector<cv::KeyPoint> &kpts,
                                   cv::Mat &dscpts, int nfeatures) {
-    static cv::Ptr<cv::ORB> orb_detector;
-    if (!orb_detector) { orb_detector = cv::ORB::create(nfeatures); }
+    cv::Ptr orb_detector = cv::ORB::create(nfeatures);
     orb_detector->detectAndCompute(image, cv::Mat(), kpts, dscpts);
 }
 
@@ -374,11 +378,11 @@ void Frontend::filter_triangulate_points(
         cv::Mat op1 = coord + tcw1;// (coord - (-tcw1) = coord + tcw1)
         cv::Mat op2 = coord + tcw2;
         double cos_val = op1.dot(op2) / (cv::norm(op1) * cv::norm(op2));
-        if (cos_val > 0.99998) {
+        if (cos_val > 0.999999) {
             inliers[i] = false;
             continue;
         }
-        */
+         */
         // re-projection error
         cv::Mat reproj_pt = proj2 * hm_coord;
         reproj_pt /= reproj_pt.at<float>(2, 0);
@@ -499,7 +503,7 @@ void Frontend::initialize(const cv::Mat &image, double t) {
 bool Frontend::tracking(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
-    detect_and_compute(image, kpts, dscpts, 500),
+    detect_and_compute(image, kpts, dscpts, 1000),
             m_cur_frame = std::make_shared<Frame>(
                     Frame::create_frame(dscpts, kpts, m_camera, t));
     m_cur_frame->img = image;
@@ -520,7 +524,6 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     log_debug_line("Projected " << cnt_proj_succ << " points.");
 
     if (proj_res.size() < 10) {
-        std::cerr << "Oh no! May be motion blur!" << std::endl;
         std::string title = "image " + std::to_string(m_cur_frame->get_id());
         cv::imshow(title, m_cur_frame->img);
         cv::waitKey(0);
@@ -613,20 +616,30 @@ void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
     cv::Mat proj_mat =
             get_proj_mat(m_camera.get_intrinsic_mat(), m_cur_frame->get_Rcw(),
                          m_cur_frame->get_Tcw());
+    size_t not_in_view = 0, too_far = 0, not_evident = 0;
     for (auto &pair : m_local_points) {
         vo_ptr<MapPoint> map_pt = pair.second.second;
         cv::Point2f pt = reproj_point(proj_mat, map_pt->get_coord());
         if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || pt.x < 0 ||
             pt.x > m_camera.get_width() || pt.y < 0 ||
             pt.y > m_camera.get_height()) {
+            not_in_view += 1;
             continue;
         }
 
         double dis;
         int index =
-                m_cur_frame->local_match(map_pt->get_desc(), pt, dis, 12.0f);
-        if (index > 0) { proj_res.insert_info_check(index, map_pt, dis); }
+                m_cur_frame->local_match(map_pt->get_desc(), pt, dis, 12.0f, 0.8);
+        if (index > 0) {
+            proj_res.insert_info_check(index, map_pt, dis);
+        } else if (index == -1) {
+            too_far += 1;
+        } else if (index == -2) {
+            not_evident += 1;
+        }
     }
+    log_debug_line("Not in view: " << not_in_view << ". Too far: " << too_far
+                                   << " Not evident: " << not_evident);
 }
 
 int Frontend::triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res) {

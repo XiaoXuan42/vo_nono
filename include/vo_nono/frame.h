@@ -92,7 +92,7 @@ public:
         return m_descriptor.row(i);
     }
     int local_match(const cv::Mat &desc, const cv::Point2f &pos, double &dis,
-                    const float dist_th);
+                    const float dist_th, double lowe_th);
 
 private:
     constexpr static int WIDTH_TOTAL_GRID = 20;
