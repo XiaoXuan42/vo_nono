@@ -100,6 +100,8 @@ private:
     }
 
 private:
+    static constexpr int MAX_CNT_WINDOW_FRAME = 5;
+
     FrontendConfig m_config;
     Camera m_camera;
     State m_state;

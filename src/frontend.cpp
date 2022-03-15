@@ -16,7 +16,7 @@
 #include <opencv2/highgui.hpp>
 
 //#define SHOW_IMGAGE 1
-#define START_IMAGE 150
+#define START_IMAGE 95
 #endif
 
 namespace vo_nono {
@@ -505,14 +505,21 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     // todo: camera dist coeff?
     ReprojRes proj_res;
     m_cur_frame->set_pose(m_last_frame->get_Rcw(), m_last_frame->get_Tcw());
-    reproj_with_motion(proj_res);
-    if (proj_res.size() < 10) {
+    TIME_IT(reproj_with_motion(proj_res), "reproj with motion cost ");
+
+    log_debug_line("Motion model predict:\n"
+                   << m_cur_frame->get_Rcw() << "\n"
+                   << m_cur_frame->get_Tcw());
+
+    if (proj_res.size() <= 10) {
         log_debug_line("Motion model totally abandoned.");
         proj_res.clear();
         m_cur_frame->set_pose(m_last_frame->get_Rcw(), m_last_frame->get_Tcw());
     }
+
     log_debug_line(m_local_points.size() << " local points.");
-    reproj_with_local_points(proj_res);
+    TIME_IT(reproj_with_local_points(proj_res),
+            "reproj with local points cost ");
     int cnt_proj_succ = (int) proj_res.size();
     log_debug_line("Projected " << cnt_proj_succ << " points.");
 
@@ -523,9 +530,8 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
         log_debug_line("Track missing. Discard this frame.");
         return false;
     }
-
     log_debug_line("Pose estimate with " << proj_res.size() << " points.");
-    reproj_pose_estimate(proj_res, 1);
+    TIME_IT(reproj_pose_estimate(proj_res, 1), "reproj pose estimate cost ");
     log_debug_line("Pose estimated with " << proj_res.size() << " left.");
     int cnt_new_pts = triangulate(m_keyframe, proj_res);
     log_debug_line("Generate " << cnt_new_pts << " new map points.");
@@ -637,8 +643,10 @@ void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
 
 int Frontend::triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res) {
     int total_new_pts = 0;
-    std::vector<cv::DMatch> matches = match_descriptor(
-            ref_frame->get_descs(), m_cur_frame->get_descs(), 8, 15, 100);
+    std::vector<cv::DMatch> matches;
+    TIME_IT(matches = match_descriptor(ref_frame->get_descs(),
+                                       m_cur_frame->get_descs(), 8, 15, 100),
+            "Match cost ");
     std::vector<unsigned char> mask;
     std::vector<cv::KeyPoint> kpts1, kpts2;
     kpts1.reserve(matches.size());
@@ -741,8 +749,8 @@ int Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
 }
 
 void Frontend::select_new_keyframe(const vo_ptr<Frame> &new_keyframe) {
-    assert(m_window_frame.size() <= 5);
-    if (m_window_frame.size() == 5) {
+    assert(m_window_frame.size() <= MAX_CNT_WINDOW_FRAME);
+    if (m_window_frame.size() == MAX_CNT_WINDOW_FRAME) {
         vo_ptr<Frame> old_frame = m_window_frame.front();
         m_window_frame.pop_front();
 
