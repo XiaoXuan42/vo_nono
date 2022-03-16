@@ -100,7 +100,9 @@ private:
     }
 
 private:
-    static constexpr int MAX_CNT_WINDOW_FRAME = 5;
+    static constexpr int CNT_MAX_WINDOW_FRAMES = 5;
+    static constexpr int CNT_INIT_KEY_PTS = 1000;
+    static constexpr int CNT_TRACK_KEY_PTS = 1000;
 
     FrontendConfig m_config;
     Camera m_camera;

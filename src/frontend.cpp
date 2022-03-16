@@ -435,7 +435,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 void Frontend::initialize(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
-    detect_and_compute(image, kpts, dscpts, 1000);
+    detect_and_compute(image, kpts, dscpts, CNT_INIT_KEY_PTS);
     std::vector<cv::DMatch> matches;
     matches = match_descriptor(m_keyframe->get_descs(), dscpts, 8, 15, 100);
 
@@ -496,7 +496,7 @@ void Frontend::initialize(const cv::Mat &image, double t) {
 bool Frontend::tracking(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
-    detect_and_compute(image, kpts, dscpts, 1000),
+    detect_and_compute(image, kpts, dscpts, CNT_TRACK_KEY_PTS),
             m_cur_frame = std::make_shared<Frame>(
                     Frame::create_frame(dscpts, kpts, m_camera, t));
     m_cur_frame->img = image;
@@ -749,8 +749,8 @@ int Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
 }
 
 void Frontend::select_new_keyframe(const vo_ptr<Frame> &new_keyframe) {
-    assert(m_window_frame.size() <= MAX_CNT_WINDOW_FRAME);
-    if (m_window_frame.size() == MAX_CNT_WINDOW_FRAME) {
+    assert(m_window_frame.size() <= CNT_MAX_WINDOW_FRAMES);
+    if (m_window_frame.size() == CNT_MAX_WINDOW_FRAMES) {
         vo_ptr<Frame> old_frame = m_window_frame.front();
         m_window_frame.pop_front();
 
