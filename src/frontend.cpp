@@ -341,8 +341,7 @@ void Frontend::filter_triangulate_points(
         const cv::Mat &tri, const cv::Mat &Rcw1, const cv::Mat &tcw1,
         const cv::Mat &Rcw2, const cv::Mat &tcw2,
         const std::vector<cv::Point2f> &pts1,
-        const std::vector<cv::Point2f> &pts2, std::vector<bool> &inliers,
-        float thresh_square) {
+        const std::vector<cv::Point2f> &pts2, std::vector<bool> &inliers) {
     assert(tri.cols == (int) pts1.size());
     assert(tri.cols == (int) pts2.size());
     const int total_pts = tri.cols;
@@ -376,17 +375,6 @@ void Frontend::filter_triangulate_points(
             continue;
         }
          */
-        // re-projection error
-        cv::Mat reproj_pt = proj2 * hm_coord;
-        reproj_pt /= reproj_pt.at<float>(2, 0);
-        float dx = reproj_pt.at<float>(0, 0) - pts2[i].x,
-              dy = reproj_pt.at<float>(1, 0) - pts2[i].y;
-        float diff_square = dx * dx + dy * dy;
-        if (diff_square > thresh_square) {
-            inliers[i] = false;
-            continue;
-        }
-
         inliers[i] = true;
     }
 }
@@ -483,7 +471,7 @@ void Frontend::initialize(const cv::Mat &image, double t) {
     filter_triangulate_points(tri_res, m_keyframe->get_Rcw(),
                               m_keyframe->get_Tcw(), m_cur_frame->get_Rcw(),
                               m_cur_frame->get_Tcw(), matched_pt1, matched_pt2,
-                              inliers, 0.04);
+                              inliers);
 
     log_debug_line("Initialize with R: " << std::endl
                                          << Rcw << std::endl
@@ -667,18 +655,18 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     matches = filter_by_mask(matches, mask);
     match_kpt1 = filter_by_mask(match_kpt1, mask);
     match_kpt2 = filter_by_mask(match_kpt2, mask);
+    log_debug_line(matches.size() << " matches after filter.");
 
     std::vector<cv::Matx31f> pt_coords;
     std::vector<cv::Point2f> img_pts;
     std::vector<cv::Point2f> new_img_pt1, new_img_pt2;
-    std::vector<cv::DMatch> new_match;
+    std::vector<cv::DMatch> new_match, old_match;
     for (auto &match : matches) {
         if (o_frame->is_pt_set(match.queryIdx)) {
+            old_match.push_back(match);
             pt_coords.push_back(
                     o_frame->get_map_pt(match.queryIdx)->get_coord());
             img_pts.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
-            m_cur_frame->set_map_pt(match.trainIdx,
-                                    o_frame->get_map_pt(match.queryIdx));
         } else {
             new_match.push_back(match);
             new_img_pt1.push_back(o_frame->get_kpt_by_index(match.queryIdx).pt);
@@ -686,6 +674,7 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
                     m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
         }
     }
+    log_debug_line(old_match.size() << " old match.");
 
     cv::Mat rvec, tcw;
     cv::Rodrigues(m_cur_frame->get_Rcw(), rvec);
@@ -694,14 +683,28 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     tcw.convertTo(tcw, CV_64F);
     std::vector<int> inliers;
     cv::solvePnPRansac(pt_coords, img_pts, m_camera.get_intrinsic_mat(),
-                       std::vector<double>(), rvec, tcw, true, 100, 1, 0.99,
+                       std::vector<double>(), rvec, tcw, true, 100, 2, 0.99,
                        inliers);
+    log_debug_line("Pnp compatible with " << inliers.size() << " points.");
+
     cv::Mat Rcw;
     cv::Rodrigues(rvec, Rcw);
     Rcw.convertTo(Rcw, CV_64F);
     tcw.convertTo(tcw, CV_64F);
     m_cur_frame->set_pose(Rcw, tcw);
 
+    size_t cur_inlier = 0;
+    for (int i = 0; i < (int) pt_coords.size(); ++i) {
+        if (cur_inlier < inliers.size() && inliers[cur_inlier] == i) {
+            m_cur_frame->set_map_pt(old_match[i].trainIdx,
+                                    o_frame->get_map_pt(old_match[i].queryIdx));
+        }
+        while (cur_inlier < inliers.size() && i > inliers[cur_inlier]) {
+            cur_inlier += 1;
+        }
+    }
+
+    int cnt_new_map_pt = 0;
     if (!new_img_pt1.empty()) {
         cv::Mat tri_res;
         cv::Mat proj_mat1 =
@@ -712,14 +715,17 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
                              m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw());
         cv::triangulatePoints(proj_mat1, proj_mat2, new_img_pt1, new_img_pt2,
                               tri_res);
+        log_debug_line(tri_res.cols << " new map points before filter.");
         std::vector<bool> tri_inliers;
         filter_triangulate_points(tri_res, o_frame->get_Rcw(),
                                   o_frame->get_Tcw(), m_cur_frame->get_Rcw(),
                                   m_cur_frame->get_Tcw(), new_img_pt1,
                                   new_img_pt2, tri_inliers);
-        set_new_map_points(o_frame, tri_res, new_match, tri_inliers);
+        cnt_new_map_pt =
+                set_new_map_points(o_frame, tri_res, new_match, tri_inliers);
     }
-    return int(matches.size() - new_match.size());
+    log_debug_line(cnt_new_map_pt << " new map points.");
+    return cnt_new_map_pt;
 }
 
 int Frontend::triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res) {
@@ -806,9 +812,10 @@ int Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
     for (size_t i = 0; i < matches.size(); ++i) {
         if (!inliers[i]) { continue; }
         cv::Mat cur_point = new_tri_res.col((int) i);
-        if (!float_eq_zero(cur_point.at<float>(3))) {
+        float z_val = cur_point.at<float>(3);
+        if (!float_eq_zero(z_val) && std::isfinite(z_val)) {
             // not infinite point
-            cur_point /= cur_point.at<float>(3);
+            cur_point /= z_val;
             float x = cur_point.at<float>(0);
             float y = cur_point.at<float>(1);
             float z = cur_point.at<float>(2);

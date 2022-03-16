@@ -63,8 +63,7 @@ private:
                                    const cv::Mat &tcw2,
                                    const std::vector<cv::Point2f> &pts1,
                                    const std::vector<cv::Point2f> &pts2,
-                                   std::vector<bool> &inliers,
-                                   float thresh_square = 1.0);
+                                   std::vector<bool> &inliers);
 
     void initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
@@ -74,9 +73,9 @@ private:
     int track_with_match(const vo_ptr<Frame> &o_frame);
     int triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res);
     int set_new_map_points(const vo_ptr<Frame> &ref_frame,
-                            const cv::Mat &new_tri_res,
-                            const std::vector<cv::DMatch> &matches,
-                            const std::vector<bool> &inliers);
+                           const cv::Mat &new_tri_res,
+                           const std::vector<cv::DMatch> &matches,
+                           const std::vector<bool> &inliers);
     void insert_map_points(std::vector<vo_ptr<MapPoint>> &points) {
         if (m_map) { m_map->insert_map_points(points); }
     }
