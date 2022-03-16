@@ -398,7 +398,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         assert(!m_keyframe);
         cv::Mat dscpts;
         std::vector<cv::KeyPoint> kpts;
-        detect_and_compute(image, kpts, dscpts, 500);
+        detect_and_compute(image, kpts, dscpts, CNT_INIT_KEY_PTS);
         m_keyframe = std::make_shared<Frame>(
                 Frame::create_frame(dscpts, std::move(kpts), m_camera, t));
         m_cur_frame = m_keyframe;
