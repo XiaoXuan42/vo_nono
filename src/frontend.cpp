@@ -496,13 +496,18 @@ void Frontend::initialize(const cv::Mat &image, double t) {
 bool Frontend::tracking(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
-    detect_and_compute(image, kpts, dscpts, CNT_TRACK_KEY_PTS),
-            m_cur_frame = std::make_shared<Frame>(
-                    Frame::create_frame(dscpts, kpts, m_camera, t));
+    TIME_IT(detect_and_compute(image, kpts, dscpts, CNT_TRACK_KEY_PTS),
+            "Detect cost ");
+    m_cur_frame = std::make_shared<Frame>(
+            Frame::create_frame(dscpts, kpts, m_camera, t));
     m_cur_frame->img = image;
 
     // todo: relocalization(both model fails)
     // todo: camera dist coeff?
+    cv::Mat motion_Rcw, motion_Tcw;
+    m_motion_pred.predict_pose(m_cur_frame->get_time(), motion_Rcw, motion_Tcw);
+    m_cur_frame->set_pose(motion_Rcw, motion_Tcw);
+    /*
     ReprojRes proj_res;
     m_cur_frame->set_pose(m_last_frame->get_Rcw(), m_last_frame->get_Tcw());
     TIME_IT(reproj_with_motion(proj_res), "reproj with motion cost ");
@@ -516,7 +521,8 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
         proj_res.clear();
         m_cur_frame->set_pose(m_last_frame->get_Rcw(), m_last_frame->get_Tcw());
     }
-
+     */
+    /*
     log_debug_line(m_local_points.size() << " local points.");
     TIME_IT(reproj_with_local_points(proj_res),
             "reproj with local points cost ");
@@ -541,7 +547,10 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
             m_cur_frame->set_map_pt(pair.first, pair.second.map_pt);
         }
     }
-
+    */
+    int cnt_new_pts = 0;
+    TIME_IT(cnt_new_pts = track_with_match(m_keyframe),
+            "Track with match cost ");
     if (cnt_new_pts <= 10 ||
         m_cur_frame->get_id() > m_keyframe->get_id() + 20) {
         if (m_last_frame->get_kpt_cnt() > m_cur_frame->get_kpt_cnt()) {
@@ -639,6 +648,78 @@ void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
     }
     log_debug_line("Not in view: " << not_in_view << ". Too far: " << too_far
                                    << " Not evident: " << not_evident);
+}
+
+int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
+    std::vector<cv::DMatch> matches;
+    TIME_IT(matches = match_descriptor(o_frame->get_descs(),
+                                       m_cur_frame->get_descs(), 8, 30, 100),
+            "ORB match cost ");
+    std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
+    match_kpt1.reserve(matches.size());
+    match_kpt2.reserve(matches.size());
+    for (auto &match : matches) {
+        match_kpt1.push_back(o_frame->get_kpt_by_index(match.queryIdx));
+        match_kpt2.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx));
+    }
+    std::vector<unsigned char> mask;
+    filter_match_with_kpts(match_kpt1, match_kpt2, mask, 3);
+    matches = filter_by_mask(matches, mask);
+    match_kpt1 = filter_by_mask(match_kpt1, mask);
+    match_kpt2 = filter_by_mask(match_kpt2, mask);
+
+    std::vector<cv::Matx31f> pt_coords;
+    std::vector<cv::Point2f> img_pts;
+    std::vector<cv::Point2f> new_img_pt1, new_img_pt2;
+    std::vector<cv::DMatch> new_match;
+    for (auto &match : matches) {
+        if (o_frame->is_pt_set(match.queryIdx)) {
+            pt_coords.push_back(
+                    o_frame->get_map_pt(match.queryIdx)->get_coord());
+            img_pts.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
+            m_cur_frame->set_map_pt(match.trainIdx,
+                                    o_frame->get_map_pt(match.queryIdx));
+        } else {
+            new_match.push_back(match);
+            new_img_pt1.push_back(o_frame->get_kpt_by_index(match.queryIdx).pt);
+            new_img_pt2.push_back(
+                    m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
+        }
+    }
+
+    cv::Mat rvec, tcw;
+    cv::Rodrigues(m_cur_frame->get_Rcw(), rvec);
+    rvec.convertTo(rvec, CV_64F);
+    tcw = m_cur_frame->get_Tcw().clone();
+    tcw.convertTo(tcw, CV_64F);
+    std::vector<int> inliers;
+    cv::solvePnPRansac(pt_coords, img_pts, m_camera.get_intrinsic_mat(),
+                       std::vector<double>(), rvec, tcw, true, 100, 1, 0.99,
+                       inliers);
+    cv::Mat Rcw;
+    cv::Rodrigues(rvec, Rcw);
+    Rcw.convertTo(Rcw, CV_64F);
+    tcw.convertTo(tcw, CV_64F);
+    m_cur_frame->set_pose(Rcw, tcw);
+
+    if (!new_img_pt1.empty()) {
+        cv::Mat tri_res;
+        cv::Mat proj_mat1 =
+                get_proj_mat(m_camera.get_intrinsic_mat(), o_frame->get_Rcw(),
+                             o_frame->get_Tcw());
+        cv::Mat proj_mat2 =
+                get_proj_mat(m_camera.get_intrinsic_mat(),
+                             m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw());
+        cv::triangulatePoints(proj_mat1, proj_mat2, new_img_pt1, new_img_pt2,
+                              tri_res);
+        std::vector<bool> tri_inliers;
+        filter_triangulate_points(tri_res, o_frame->get_Rcw(),
+                                  o_frame->get_Tcw(), m_cur_frame->get_Rcw(),
+                                  m_cur_frame->get_Tcw(), new_img_pt1,
+                                  new_img_pt2, tri_inliers);
+        set_new_map_points(o_frame, tri_res, new_match, tri_inliers);
+    }
+    return int(matches.size() - new_match.size());
 }
 
 int Frontend::triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res) {

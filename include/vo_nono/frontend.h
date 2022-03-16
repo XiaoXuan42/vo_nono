@@ -71,6 +71,7 @@ private:
     void reproj_with_motion(ReprojRes &proj_res);
     void reproj_with_local_points(ReprojRes &proj_res);
     void reproj_pose_estimate(ReprojRes &proj_res, float reproj_th);
+    int track_with_match(const vo_ptr<Frame> &o_frame);
     int triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res);
     int set_new_map_points(const vo_ptr<Frame> &ref_frame,
                             const cv::Mat &new_tri_res,
