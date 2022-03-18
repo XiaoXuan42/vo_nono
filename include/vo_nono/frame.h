@@ -61,6 +61,8 @@ public:
         assert(m_Tcw.type() == CV_32F);
     }
     void set_pose(const cv::Mat &Rcw, const cv::Mat &Tcw) {
+        assert(Rcw.type() == CV_32F);
+        assert(Tcw.type() == CV_32F);
         set_Rcw(Rcw);
         set_Tcw(Tcw);
     }

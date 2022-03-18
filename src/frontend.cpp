@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "vo_nono/pnp.h"
 #include "vo_nono/point.h"
 #include "vo_nono/util.h"
 
@@ -274,6 +275,18 @@ void reproj_points_from_frame(const vo_ptr<Frame> &left_frame,
                                    desc_dis[i]);
     }
 }
+
+[[maybe_unused]] void show_matches(const vo_ptr<Frame> &left_frame,
+                                   const vo_ptr<Frame> &right_frame,
+                                   const std::vector<cv::DMatch> &matches) {
+    cv::Mat outimg;
+    std::string title = std::to_string(left_frame->get_id()) + " match " +
+                        std::to_string(right_frame->get_id());
+    cv::drawMatches(left_frame->img, left_frame->get_kpts(), right_frame->img,
+                    right_frame->get_kpts(), matches, outimg);
+    cv::imshow(title, outimg);
+    cv::waitKey(0);
+}
 }// namespace
 
 // detect feature points and compute descriptors
@@ -390,6 +403,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         m_keyframe = std::make_shared<Frame>(
                 Frame::create_frame(dscpts, std::move(kpts), m_camera, t));
         m_cur_frame = m_keyframe;
+        m_cur_frame->img = image;
 
         m_map->insert_key_frame(m_keyframe);
         m_state = State::Initializing;
@@ -485,7 +499,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat dscpts;
     TIME_IT(detect_and_compute(image, kpts, dscpts, CNT_TRACK_KEY_PTS),
-            "Detect cost ");
+            "Detect keypoint cost ");
     m_cur_frame = std::make_shared<Frame>(
             Frame::create_frame(dscpts, kpts, m_camera, t));
     m_cur_frame->img = image;
@@ -676,33 +690,27 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     }
     log_debug_line(old_match.size() << " old match.");
 
-    cv::Mat rvec, tcw;
-    cv::Rodrigues(m_cur_frame->get_Rcw(), rvec);
-    rvec.convertTo(rvec, CV_64F);
-    tcw = m_cur_frame->get_Tcw().clone();
-    tcw.convertTo(tcw, CV_64F);
-    std::vector<int> inliers;
-    cv::solvePnPRansac(pt_coords, img_pts, m_camera.get_intrinsic_mat(),
-                       std::vector<double>(), rvec, tcw, true, 100, 2, 0.99,
-                       inliers);
-    log_debug_line("Pnp compatible with " << inliers.size() << " points.");
+    std::vector<bool> inliers;
+    cv::Mat Rcw = m_cur_frame->get_Rcw().clone(),
+            tcw = m_cur_frame->get_Tcw().clone();
+    pnp_ransac(pt_coords, img_pts, m_camera, 100, 1, Rcw, tcw, inliers,
+               PNP_RANSAC::CV_PNP_RANSAC);
+    assert(inliers.size() == pt_coords.size());
 
-    cv::Mat Rcw;
-    cv::Rodrigues(rvec, Rcw);
-    Rcw.convertTo(Rcw, CV_64F);
-    tcw.convertTo(tcw, CV_64F);
-    m_cur_frame->set_pose(Rcw, tcw);
-
-    size_t cur_inlier = 0;
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
-        if (cur_inlier < inliers.size() && inliers[cur_inlier] == i) {
+        if (inliers[i]) {
             m_cur_frame->set_map_pt(old_match[i].trainIdx,
                                     o_frame->get_map_pt(old_match[i].queryIdx));
         }
-        while (cur_inlier < inliers.size() && i > inliers[cur_inlier]) {
-            cur_inlier += 1;
-        }
     }
+
+    /*
+    if (m_cur_frame->get_id() > 105) {
+        show_matches(o_frame, m_cur_frame, matches);
+        show_matches(o_frame, m_cur_frame, valid_matches);
+    }
+     */
+    m_cur_frame->set_pose(Rcw, tcw);
 
     int cnt_new_map_pt = 0;
     if (!new_img_pt1.empty()) {
