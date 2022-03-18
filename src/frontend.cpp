@@ -691,25 +691,23 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     log_debug_line(old_match.size() << " old match.");
 
     std::vector<bool> inliers;
+    std::vector<cv::Matx31f> inlier_coords;
+    std::vector<cv::Point2f> inlier_img_pts;
     cv::Mat Rcw = m_cur_frame->get_Rcw().clone(),
             tcw = m_cur_frame->get_Tcw().clone();
-    pnp_ransac(pt_coords, img_pts, m_camera, 100, 1, Rcw, tcw, inliers,
+    pnp_ransac(pt_coords, img_pts, m_camera, 100, 2, Rcw, tcw, inliers,
                PNP_RANSAC::CV_PNP_RANSAC);
     assert(inliers.size() == pt_coords.size());
 
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
         if (inliers[i]) {
+            inlier_coords.push_back(pt_coords[i]);
+            inlier_img_pts.push_back(img_pts[i]);
             m_cur_frame->set_map_pt(old_match[i].trainIdx,
                                     o_frame->get_map_pt(old_match[i].queryIdx));
         }
     }
-
-    /*
-    if (m_cur_frame->get_id() > 105) {
-        show_matches(o_frame, m_cur_frame, matches);
-        show_matches(o_frame, m_cur_frame, valid_matches);
-    }
-     */
+    pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_cur_frame->set_pose(Rcw, tcw);
 
     int cnt_new_map_pt = 0;
@@ -723,7 +721,6 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
                              m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw());
         cv::triangulatePoints(proj_mat1, proj_mat2, new_img_pt1, new_img_pt2,
                               tri_res);
-        log_debug_line(tri_res.cols << " new map points before filter.");
         std::vector<bool> tri_inliers;
         filter_triangulate_points(tri_res, o_frame->get_Rcw(),
                                   o_frame->get_Tcw(), m_cur_frame->get_Rcw(),

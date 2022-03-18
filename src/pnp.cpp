@@ -143,4 +143,18 @@ void pnp_ransac(const std::vector<cv::Matx31f>& coords,
             unimplemented();
     }
 }
+
+void pnp_optimize_proj_err(const std::vector<cv::Matx31f>& coords,
+                           const std::vector<cv::Point2f>& img_pts,
+                           const Camera& camera, cv::Mat& Rcw, cv::Mat& tcw) {
+    cv::Mat rvec;
+    cv::Rodrigues(Rcw, rvec);
+    rvec.convertTo(rvec, CV_64F);
+    tcw.convertTo(tcw, CV_64F);
+    cv::solvePnPRefineLM(coords, img_pts, camera.get_intrinsic_mat(),
+                         std::vector<double>(), rvec, tcw);
+    cv::Rodrigues(rvec, Rcw);
+    Rcw.convertTo(Rcw, CV_32F);
+    tcw.convertTo(tcw, CV_32F);
+}
 }// namespace vo_nono
