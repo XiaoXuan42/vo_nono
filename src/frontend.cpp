@@ -103,6 +103,20 @@ private:
 };
 
 namespace {
+bool hm3d_to_euclid(cv::Mat &hm_coord, int col) {
+    assert(hm_coord.type() == CV_32F);
+    assert(hm_coord.rows == 4);
+    float scale = hm_coord.at<float>(3, col);
+    if (!std::isfinite(scale)) { return false; }
+    hm_coord.col(col) /= scale;
+    if (!std::isfinite(hm_coord.at<float>(0, col)) ||
+        !std::isfinite(hm_coord.at<float>(1, col)) ||
+        !std::isfinite(hm_coord.at<float>(2, col))) {
+        return false;
+    }
+    return true;
+}
+
 void filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
                             const std::vector<cv::KeyPoint> &kpts2,
                             std::vector<unsigned char> &mask, const int topK) {
@@ -125,14 +139,6 @@ void filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
         pts2.push_back(kpts2[i].pt);
     }
     mask = std::vector<unsigned char>(pts1.size(), 1);
-    /*  Use fundamental mat and ransac to filter matches?
-    mask.clear();
-    if (pts1.size() > 8) {
-        cv::findFundamentalMat(pts1, pts2, mask, cv::FM_RANSAC, 2);
-    } else {
-        mask = std::vector<unsigned char>(pts1.size(), 1);
-    }
-     */
     histo.cal_topK(topK);
     for (int i = 0; i < (int) kpts1.size(); ++i) {
         if (!histo.is_topK(ang_diff[i])) { mask[i] = 0; }
@@ -350,28 +356,26 @@ std::vector<cv::DMatch> Frontend::filter_matches(
     return filter_by_mask(matches, mask);
 }
 
-void Frontend::filter_triangulate_points(
-        const cv::Mat &tri, const cv::Mat &Rcw1, const cv::Mat &tcw1,
-        const cv::Mat &Rcw2, const cv::Mat &tcw2,
-        const std::vector<cv::Point2f> &pts1,
-        const std::vector<cv::Point2f> &pts2, std::vector<bool> &inliers,
-        double ang_cos_th) {
+int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
+                                        const cv::Mat &tcw1,
+                                        const cv::Mat &Rcw2,
+                                        const cv::Mat &tcw2,
+                                        const std::vector<cv::Point2f> &pts1,
+                                        const std::vector<cv::Point2f> &pts2,
+                                        std::vector<bool> &inliers,
+                                        double ang_cos_th) {
     assert(tri.cols == (int) pts1.size());
     assert(tri.cols == (int) pts2.size());
+    int cnt_inlier = 0;
     const int total_pts = tri.cols;
     inliers.resize(total_pts);
     cv::Mat proj2 = get_proj_mat(m_camera.get_intrinsic_mat(), Rcw2, tcw2);
     for (int i = 0; i < total_pts; ++i) {
-        cv::Mat hm_coord = tri.col(i).clone();
-        hm_coord /= hm_coord.at<float>(3, 0);
-        cv::Mat coord = hm_coord.rowRange(0, 3);
-        // filter out infinite point
-        if (!std::isfinite(coord.at<float>(0, 0)) ||
-            !std::isfinite(coord.at<float>(1, 0)) ||
-            !std::isfinite(coord.at<float>(2, 0))) {
+        if (!hm3d_to_euclid(tri, i)) {
             inliers[i] = false;
             continue;
         }
+        cv::Mat coord = tri.col(i).rowRange(0, 3);
         // depth must be positive
         cv::Mat coord_c1 = Rcw1 * coord + tcw1;
         cv::Mat coord_c2 = Rcw2 * coord + tcw2;
@@ -388,7 +392,9 @@ void Frontend::filter_triangulate_points(
             continue;
         }
         inliers[i] = true;
+        cnt_inlier += 1;
     }
+    return cnt_inlier;
 }
 
 void Frontend::get_image(const cv::Mat &image, double t) {
@@ -481,15 +487,29 @@ void Frontend::initialize(const cv::Mat &image, double t) {
     cv::triangulatePoints(proj_mat1, proj_mat2, matched_pt1, matched_pt2,
                           tri_res);
     std::vector<bool> inliers;
-    filter_triangulate_points(tri_res, m_keyframe->get_Rcw(),
-                              m_keyframe->get_Tcw(), m_cur_frame->get_Rcw(),
-                              m_cur_frame->get_Tcw(), matched_pt1, matched_pt2,
-                              inliers);
+    int cnt_new_pt = filter_triangulate_points(
+            tri_res, m_keyframe->get_Rcw(), m_keyframe->get_Tcw(),
+            m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw(), matched_pt1,
+            matched_pt2, inliers);
+
+    double scale = 3;
+    for (int i = 0; i < tri_res.cols; ++i) {
+        if (inliers[i]) {
+            assert(tri_res.at<float>(2, i) > 0);
+            scale += tri_res.at<float>(2, i);
+        }
+    }
+    scale /= cnt_new_pt;
+    for (int i = 0; i < tri_res.cols; ++i) {
+        tri_res.rowRange(0, 3).col(i) /= scale;
+    }
+    m_cur_frame->set_Tcw(t_cw / scale);
 
     log_debug_line("Initialize with R: " << std::endl
                                          << Rcw << std::endl
                                          << "T: " << std::endl
-                                         << t_cw << std::endl);
+                                         << t_cw << std::endl
+                                         << cnt_new_pt << " new map points.");
     set_new_map_points(m_keyframe, tri_res, matches, inliers);
     select_new_keyframe(m_keyframe);
 }

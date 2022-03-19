@@ -43,14 +43,12 @@ int main(int argc, const char *argv[]) {
                 std::chrono::duration_cast<std::chrono::duration<double>>(t2 -
                                                                           t1)
                         .count();
-        std::cout << "Frame " << frame_id << " cost " << time_used
-                  << " seconds." << std::endl;
+        std::cout << "Frame " << frame_id << "(time: " << cur_time << ") cost "
+                  << time_used << " seconds." << std::endl;
         std::cout << "---------------------------------------------------------"
                      "----"
                   << std::endl;
-        if (frame_id >= 160) {
-            break;
-        }
+        if (frame_id >= 160) { break; }
         frame_id += 1;
     }
 

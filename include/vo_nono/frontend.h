@@ -58,13 +58,13 @@ public:
     }
 
 private:
-    void filter_triangulate_points(const cv::Mat &tri, const cv::Mat &Rcw1,
+    int filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
                                    const cv::Mat &tcw1, const cv::Mat &Rcw2,
                                    const cv::Mat &tcw2,
                                    const std::vector<cv::Point2f> &pts1,
                                    const std::vector<cv::Point2f> &pts2,
                                    std::vector<bool> &inliers,
-                                   double ang_cos_th = 0.99999999);
+                                   double ang_cos_th = 0.9999999);
 
     void initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);

@@ -40,7 +40,7 @@ void TumDataBase::trajectory_to_tum(
         const char* path) {
     std::ofstream o_stream(path);
     if (!o_stream.is_open()) { return; }
-    o_stream << std::setiosflags(std::ios::fixed) << std::setprecision(4);
+    o_stream << std::setiosflags(std::ios::fixed) << std::setprecision(6);
     for (const auto& time_pose : trajectory) {
         double time = time_pose.first;
         cv::Mat pose = time_pose.second;
