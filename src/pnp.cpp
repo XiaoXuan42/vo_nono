@@ -28,7 +28,7 @@ inline void _pnp_ransac_select(const std::vector<cv::Point2f>& img_pts,
                         cv::Point2f diff_pt = cur_pt - img_pts[res[i][k]];
                         float diff_square =
                                 diff_pt.x * diff_pt.x + diff_pt.y * diff_pt.y;
-                        if (diff_square < 100) {
+                        if (diff_square < 64) {
                             local_violate_cnt += 1;
                             is_near = true;
                             break;

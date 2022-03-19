@@ -354,7 +354,8 @@ void Frontend::filter_triangulate_points(
         const cv::Mat &tri, const cv::Mat &Rcw1, const cv::Mat &tcw1,
         const cv::Mat &Rcw2, const cv::Mat &tcw2,
         const std::vector<cv::Point2f> &pts1,
-        const std::vector<cv::Point2f> &pts2, std::vector<bool> &inliers) {
+        const std::vector<cv::Point2f> &pts2, std::vector<bool> &inliers,
+        double ang_cos_th) {
     assert(tri.cols == (int) pts1.size());
     assert(tri.cols == (int) pts2.size());
     const int total_pts = tri.cols;
@@ -378,16 +379,14 @@ void Frontend::filter_triangulate_points(
             inliers[i] = false;
             continue;
         }
-        /*
         // compute parallax
         cv::Mat op1 = coord + tcw1;// (coord - (-tcw1) = coord + tcw1)
         cv::Mat op2 = coord + tcw2;
         double cos_val = op1.dot(op2) / (cv::norm(op1) * cv::norm(op2));
-        if (cos_val > 0.999999) {
+        if (cos_val > ang_cos_th) {
             inliers[i] = false;
             continue;
         }
-         */
         inliers[i] = true;
     }
 }
@@ -655,7 +654,7 @@ void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
 int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     std::vector<cv::DMatch> matches;
     TIME_IT(matches = match_descriptor(o_frame->get_descs(),
-                                       m_cur_frame->get_descs(), 8, 30, 100),
+                                       m_cur_frame->get_descs(), 8, 30, 500),
             "ORB match cost ");
     std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
     match_kpt1.reserve(matches.size());
@@ -695,18 +694,20 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     std::vector<cv::Point2f> inlier_img_pts;
     cv::Mat Rcw = m_cur_frame->get_Rcw().clone(),
             tcw = m_cur_frame->get_Tcw().clone();
-    pnp_ransac(pt_coords, img_pts, m_camera, 100, 2, Rcw, tcw, inliers,
-               PNP_RANSAC::CV_PNP_RANSAC);
+    pnp_ransac(pt_coords, img_pts, m_camera, 100, 1, Rcw, tcw, inliers,
+               PNP_RANSAC::VO_NONO_PNP_RANSAC);
     assert(inliers.size() == pt_coords.size());
-
+    size_t cnt_inlier = 0;
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
         if (inliers[i]) {
+            cnt_inlier += 1;
             inlier_coords.push_back(pt_coords[i]);
             inlier_img_pts.push_back(img_pts[i]);
             m_cur_frame->set_map_pt(old_match[i].trainIdx,
                                     o_frame->get_map_pt(old_match[i].queryIdx));
         }
     }
+    log_debug_line(cnt_inlier << " inliers after pnp ransac");
     pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_cur_frame->set_pose(Rcw, tcw);
 
@@ -726,6 +727,8 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
                                   o_frame->get_Tcw(), m_cur_frame->get_Rcw(),
                                   m_cur_frame->get_Tcw(), new_img_pt1,
                                   new_img_pt2, tri_inliers);
+        log_debug_line("Triangulate with transition " << cv::norm(
+                               m_cur_frame->get_Tcw() - o_frame->get_Tcw()));
         cnt_new_map_pt =
                 set_new_map_points(o_frame, tri_res, new_match, tri_inliers);
     }

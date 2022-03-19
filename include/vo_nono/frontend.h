@@ -63,7 +63,8 @@ private:
                                    const cv::Mat &tcw2,
                                    const std::vector<cv::Point2f> &pts1,
                                    const std::vector<cv::Point2f> &pts2,
-                                   std::vector<bool> &inliers);
+                                   std::vector<bool> &inliers,
+                                   double ang_cos_th = 0.99999999);
 
     void initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
@@ -101,8 +102,8 @@ private:
 
 private:
     static constexpr int CNT_MAX_WINDOW_FRAMES = 5;
-    static constexpr int CNT_INIT_KEY_PTS = 500;
-    static constexpr int CNT_TRACK_KEY_PTS = 500;
+    static constexpr int CNT_INIT_KEY_PTS = 1000;
+    static constexpr int CNT_TRACK_KEY_PTS = 1000;
 
     FrontendConfig m_config;
     Camera m_camera;
