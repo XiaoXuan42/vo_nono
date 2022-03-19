@@ -369,7 +369,6 @@ int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
     int cnt_inlier = 0;
     const int total_pts = tri.cols;
     inliers.resize(total_pts);
-    cv::Mat proj2 = get_proj_mat(m_camera.get_intrinsic_mat(), Rcw2, tcw2);
     for (int i = 0; i < total_pts; ++i) {
         if (!hm3d_to_euclid(tri, i)) {
             inliers[i] = false;
@@ -379,7 +378,7 @@ int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
         // depth must be positive
         cv::Mat coord_c1 = Rcw1 * coord + tcw1;
         cv::Mat coord_c2 = Rcw2 * coord + tcw2;
-        if (coord_c1.at<float>(2, 0) < EPS || coord_c1.at<float>(2, 0) < EPS) {
+        if (coord_c1.at<float>(2, 0) < EPS || coord_c2.at<float>(2, 0) < EPS) {
             inliers[i] = false;
             continue;
         }
@@ -400,26 +399,35 @@ int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
 void Frontend::get_image(const cv::Mat &image, double t) {
     bool ok = false;
     m_last_frame = m_cur_frame;
+
+    std::vector<cv::KeyPoint> kpts;
+    cv::Mat dscpts;
+    TIME_IT(detect_and_compute(image, kpts, dscpts, CNT_KEY_PTS),
+            "Detect keypoint cost ");
+    m_cur_frame = std::make_shared<Frame>(
+            Frame::create_frame(dscpts, kpts, m_camera, t));
+    m_cur_frame->img = image;
+
     if (m_state == State::Start) {
         assert(!m_keyframe);
-        cv::Mat dscpts;
-        std::vector<cv::KeyPoint> kpts;
-        detect_and_compute(image, kpts, dscpts, CNT_INIT_KEY_PTS);
-        m_keyframe = std::make_shared<Frame>(
-                Frame::create_frame(dscpts, std::move(kpts), m_camera, t));
-        m_cur_frame = m_keyframe;
-        m_cur_frame->img = image;
-
-        m_map->insert_key_frame(m_keyframe);
+        m_keyframe = m_cur_frame;
         m_state = State::Initializing;
         ok = true;
     } else if (m_state == State::Initializing) {
         assert(m_keyframe);
-        initialize(image, t);
+        int init_state = initialize(image, t);
 
-        m_map->insert_key_frame(m_cur_frame);
-        m_state = State::Tracking;
-        ok = true;
+        if (init_state == 0) {
+            m_state = State::Tracking;
+            ok = true;
+        } else if (init_state == -1) {
+            m_keyframe = m_cur_frame;
+            ok = false;
+        } else if (init_state == -2) {
+            ok = false;
+        } else {
+            unimplemented();
+        }
     } else if (m_state == State::Tracking) {
         assert(m_keyframe);
         if (tracking(image, t)) {
@@ -439,58 +447,53 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     }
 }
 
-void Frontend::initialize(const cv::Mat &image, double t) {
-    std::vector<cv::KeyPoint> kpts;
-    cv::Mat dscpts;
-    detect_and_compute(image, kpts, dscpts, CNT_INIT_KEY_PTS);
-    std::vector<cv::DMatch> matches;
-    matches = match_descriptor(m_keyframe->get_descs(), dscpts, 8, 15, 100);
+int Frontend::initialize(const cv::Mat &image, double t) {
+    std::vector<cv::DMatch> matches = match_descriptor(
+            m_keyframe->get_descs(), m_cur_frame->get_descs(), 8, 15, 500);
 
     const std::vector<cv::KeyPoint> &prev_kpts = m_keyframe->get_kpts();
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
     for (auto &match : matches) {
         matched_pt1.push_back(prev_kpts[match.queryIdx].pt);
-        matched_pt2.push_back(kpts[match.trainIdx].pt);
+        matched_pt2.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
     }
 
     // todo: less than 8 matched points?
-    // todo: normalize scale?
     // todo: findEssentialMat hyper parameters
     std::vector<unsigned char> mask;
     cv::Mat Ess;
     TIME_IT(Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
                                        m_camera.get_intrinsic_mat(), cv::RANSAC,
-                                       0.999, 0.1, mask),
+                                       0.999, 0.5, mask),
             "Find essential mat cost ");
     // filter outliers
     matches = filter_by_mask(matches, mask);
+    if (matches.size() < 50) { return -1; }
     matched_pt1.clear();
     matched_pt2.clear();
     for (auto &match : matches) {
         matched_pt1.push_back(prev_kpts[match.queryIdx].pt);
-        matched_pt2.push_back(kpts[match.trainIdx].pt);
+        matched_pt2.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
     }
 
-    cv::Mat Rcw, t_cw;
-    cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, t_cw);
+    cv::Mat Rcw, tcw;
+    cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, tcw);
     Rcw.convertTo(Rcw, CV_32F);
-    t_cw.convertTo(t_cw, CV_32F);
-    m_cur_frame = std::make_shared<Frame>(Frame::create_frame(
-            dscpts, std::move(kpts), m_camera, t, Rcw, t_cw));
+    tcw.convertTo(tcw, CV_32F);
 
     // triangulate points
     cv::Mat tri_res;
     cv::Mat proj_mat1 =
             get_proj_mat(m_camera.get_intrinsic_mat(), m_keyframe->get_Rcw(),
                          m_keyframe->get_Tcw());
-    cv::Mat proj_mat2 = get_proj_mat(m_camera.get_intrinsic_mat(), Rcw, t_cw);
+    cv::Mat proj_mat2 = get_proj_mat(m_camera.get_intrinsic_mat(), Rcw, tcw);
     cv::triangulatePoints(proj_mat1, proj_mat2, matched_pt1, matched_pt2,
                           tri_res);
     std::vector<bool> inliers;
     int cnt_new_pt = filter_triangulate_points(
-            tri_res, m_keyframe->get_Rcw(), m_keyframe->get_Tcw(),
-            m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw(), matched_pt1,
-            matched_pt2, inliers);
+            tri_res, m_keyframe->get_Rcw(), m_keyframe->get_Tcw(), Rcw, tcw,
+            matched_pt1, matched_pt2, inliers);
+    if (cnt_new_pt < 40) { return -2; }
 
     double scale = 3;
     for (int i = 0; i < tri_res.cols; ++i) {
@@ -500,29 +503,23 @@ void Frontend::initialize(const cv::Mat &image, double t) {
         }
     }
     scale /= cnt_new_pt;
+    tcw /= scale;
+    m_cur_frame->set_pose(Rcw, tcw);
     for (int i = 0; i < tri_res.cols; ++i) {
         tri_res.rowRange(0, 3).col(i) /= scale;
     }
-    m_cur_frame->set_Tcw(t_cw / scale);
 
     log_debug_line("Initialize with R: " << std::endl
                                          << Rcw << std::endl
                                          << "T: " << std::endl
-                                         << t_cw << std::endl
+                                         << tcw << std::endl
                                          << cnt_new_pt << " new map points.");
     set_new_map_points(m_keyframe, tri_res, matches, inliers);
     select_new_keyframe(m_keyframe);
+    return 0;
 }
 
 bool Frontend::tracking(const cv::Mat &image, double t) {
-    std::vector<cv::KeyPoint> kpts;
-    cv::Mat dscpts;
-    TIME_IT(detect_and_compute(image, kpts, dscpts, CNT_TRACK_KEY_PTS),
-            "Detect keypoint cost ");
-    m_cur_frame = std::make_shared<Frame>(
-            Frame::create_frame(dscpts, kpts, m_camera, t));
-    m_cur_frame->img = image;
-
     // todo: relocalization(both model fails)
     // todo: camera dist coeff?
     cv::Mat motion_Rcw, motion_Tcw;
@@ -674,7 +671,7 @@ void Frontend::reproj_with_local_points(ReprojRes &proj_res) {
 int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     std::vector<cv::DMatch> matches;
     TIME_IT(matches = match_descriptor(o_frame->get_descs(),
-                                       m_cur_frame->get_descs(), 8, 30, 500),
+                                       m_cur_frame->get_descs(), 8, 30, 200),
             "ORB match cost ");
     std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
     match_kpt1.reserve(matches.size());

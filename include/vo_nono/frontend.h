@@ -58,7 +58,7 @@ public:
     }
 
 private:
-    int filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
+    static int filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
                                    const cv::Mat &tcw1, const cv::Mat &Rcw2,
                                    const cv::Mat &tcw2,
                                    const std::vector<cv::Point2f> &pts1,
@@ -66,7 +66,7 @@ private:
                                    std::vector<bool> &inliers,
                                    double ang_cos_th = 0.9999999);
 
-    void initialize(const cv::Mat &image, double t);
+    int initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
     void reproj_with_motion(ReprojRes &proj_res);
     void reproj_with_local_points(ReprojRes &proj_res);
@@ -102,8 +102,7 @@ private:
 
 private:
     static constexpr int CNT_MAX_WINDOW_FRAMES = 5;
-    static constexpr int CNT_INIT_KEY_PTS = 1000;
-    static constexpr int CNT_TRACK_KEY_PTS = 1000;
+    static constexpr int CNT_KEY_PTS = 1000;
 
     FrontendConfig m_config;
     Camera m_camera;
