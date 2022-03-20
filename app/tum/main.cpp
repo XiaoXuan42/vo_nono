@@ -50,10 +50,6 @@ int main(int argc, const char *argv[]) {
                   << std::endl;
         if (frame_id >= 160) { break; }
         frame_id += 1;
-        for (int i = 0; i < 2; ++i) {
-            frame_id += 1;
-            database.next();
-        }
     }
 
     if (argc >= 4) {

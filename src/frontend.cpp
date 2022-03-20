@@ -569,8 +569,9 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     int cnt_new_pts = 0;
     TIME_IT(cnt_new_pts = track_with_match(m_keyframe),
             "Track with match cost ");
-    if (cnt_new_pts <= 10 ||
-        m_cur_frame->get_id() > m_keyframe->get_id() + 20) {
+    if ((cnt_new_pts <= 10 ||
+         m_cur_frame->get_id() > m_keyframe->get_id() + 20) &&
+        m_cur_frame->get_set_cnt() > 100) {
         if (m_last_frame->get_kpt_cnt() > m_cur_frame->get_kpt_cnt()) {
             select_new_keyframe(m_last_frame);
         } else {
@@ -729,7 +730,7 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     m_cur_frame->set_pose(Rcw, tcw);
 
     int cnt_new_map_pt = 0;
-    if (!new_img_pt1.empty()) {
+    if (!new_img_pt1.empty() && o_frame->get_id() + 1 < m_cur_frame->get_id()) {
         cv::Mat tri_res;
         cv::Mat proj_mat1 =
                 get_proj_mat(m_camera.get_intrinsic_mat(), o_frame->get_Rcw(),
