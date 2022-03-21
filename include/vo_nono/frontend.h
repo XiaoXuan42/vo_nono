@@ -19,7 +19,6 @@ struct FrontendConfig {
     Camera camera;
 };
 
-class ReprojRes;
 class Frontend {
 public:
     enum class State : int {
@@ -68,11 +67,7 @@ private:
 
     int initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
-    void reproj_with_motion(ReprojRes &proj_res);
-    void reproj_with_local_points(ReprojRes &proj_res);
-    void reproj_pose_estimate(ReprojRes &proj_res, float reproj_th);
     int track_with_match(const vo_ptr<Frame> &o_frame);
-    int triangulate(const vo_ptr<Frame> &ref_frame, ReprojRes &proj_res);
     int set_new_map_points(const vo_ptr<Frame> &ref_frame,
                            const cv::Mat &new_tri_res,
                            const std::vector<cv::DMatch> &matches,
@@ -81,27 +76,8 @@ private:
         if (m_map) { m_map->insert_map_points(points); }
     }
     void select_new_keyframe(const vo_ptr<Frame> &new_keyframe);
-    void set_local_map_point(const vo_ptr<MapPoint> &map_pt) {
-        vo_id_t id = map_pt->get_id();
-        auto iter = m_local_points.find(id);
-        if (iter == m_local_points.end()) {
-            m_local_points[id] = std::make_pair(1, map_pt);
-        } else {
-            iter->second.first += 1;
-        }
-    }
-    void unset_local_map_point(vo_id_t map_pt_id) {
-        auto iter = m_local_points.find(map_pt_id);
-        assert(iter != m_local_points.end());
-        if (iter->second.first == 1) {
-            m_local_points.erase(iter);
-        } else {
-            iter->second.first -= 1;
-        }
-    }
 
 private:
-    static constexpr int CNT_MAX_WINDOW_FRAMES = 5;
     static constexpr int CNT_KEY_PTS = 1000;
 
     FrontendConfig m_config;
@@ -111,9 +87,6 @@ private:
     vo_ptr<Frame> m_keyframe;
     vo_ptr<Frame> m_cur_frame;
     vo_ptr<Frame> m_last_frame;
-    std::list<vo_ptr<Frame>> m_window_frame;
-    std::unordered_map<vo_id_t, std::pair<int, vo_ptr<MapPoint>>>
-            m_local_points;
 
     vo_ptr<Map> m_map;
 
