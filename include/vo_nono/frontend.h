@@ -57,13 +57,23 @@ public:
     }
 
 private:
+    static bool hm3d_to_euclid(cv::Mat &hm_coord, int col);
     static int filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
-                                   const cv::Mat &tcw1, const cv::Mat &Rcw2,
-                                   const cv::Mat &tcw2,
-                                   const std::vector<cv::Point2f> &pts1,
-                                   const std::vector<cv::Point2f> &pts2,
-                                   std::vector<bool> &inliers,
-                                   double ang_cos_th = 0.9999999);
+                                         const cv::Mat &tcw1,
+                                         const cv::Mat &Rcw2,
+                                         const cv::Mat &tcw2,
+                                         const std::vector<cv::Point2f> &pts1,
+                                         const std::vector<cv::Point2f> &pts2,
+                                         std::vector<bool> &inliers,
+                                         double ang_cos_th = 0.9999999);
+    static void filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
+                                       const std::vector<cv::KeyPoint> &kpts2,
+                                       std::vector<unsigned char> &mask,
+                                       const int topK);
+    static int match_between_frames(const vo_ptr<Frame> &left_frame,
+                                    const vo_ptr<Frame> &right_frame,
+                                    std::vector<cv::DMatch> &matches,
+                                    int match_cnt);
 
     int initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
@@ -79,12 +89,14 @@ private:
 
 private:
     static constexpr int CNT_KEY_PTS = 1000;
+    static constexpr int CNT_MATCHES = 200;
 
     FrontendConfig m_config;
     Camera m_camera;
     State m_state;
 
     vo_ptr<Frame> m_keyframe;
+    vo_ptr<Frame> m_candidate;
     vo_ptr<Frame> m_cur_frame;
     vo_ptr<Frame> m_last_frame;
 

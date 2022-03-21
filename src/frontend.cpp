@@ -15,48 +15,6 @@
 
 namespace vo_nono {
 namespace {
-bool hm3d_to_euclid(cv::Mat &hm_coord, int col) {
-    assert(hm_coord.type() == CV_32F);
-    assert(hm_coord.rows == 4);
-    float scale = hm_coord.at<float>(3, col);
-    if (!std::isfinite(scale)) { return false; }
-    hm_coord.col(col) /= scale;
-    if (!std::isfinite(hm_coord.at<float>(0, col)) ||
-        !std::isfinite(hm_coord.at<float>(1, col)) ||
-        !std::isfinite(hm_coord.at<float>(2, col))) {
-        return false;
-    }
-    return true;
-}
-
-void filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
-                            const std::vector<cv::KeyPoint> &kpts2,
-                            std::vector<unsigned char> &mask, const int topK) {
-    assert(kpts1.size() == kpts2.size());
-    auto ang_diff_index = [](double diff_ang) {
-        if (diff_ang < 0) { diff_ang += 360; }
-        return (int) (diff_ang / 3.6);
-    };
-    std::vector<cv::Point2f> pts1, pts2;
-    pts1.reserve(kpts1.size());
-    pts2.reserve(kpts2.size());
-    Histogram<double> histo(101, ang_diff_index);
-    std::vector<double> ang_diff;
-    for (int i = 0; i < (int) kpts1.size(); ++i) {
-        double diff = kpts1[i].angle - kpts2[i].angle;
-        histo.insert_element(diff);
-        ang_diff.push_back(diff);
-
-        pts1.push_back(kpts1[i].pt);
-        pts2.push_back(kpts2[i].pt);
-    }
-    mask = std::vector<unsigned char>(pts1.size(), 1);
-    histo.cal_topK(topK);
-    for (int i = 0; i < (int) kpts1.size(); ++i) {
-        if (!histo.is_topK(ang_diff[i])) { mask[i] = 0; }
-    }
-}
-
 [[maybe_unused]] void show_matches(const vo_ptr<Frame> &left_frame,
                                    const vo_ptr<Frame> &right_frame,
                                    const std::vector<cv::DMatch> &matches) {
@@ -131,6 +89,20 @@ std::vector<cv::DMatch> Frontend::filter_matches(
     return filter_by_mask(matches, mask);
 }
 
+bool Frontend::hm3d_to_euclid(cv::Mat &hm_coord, int col) {
+    assert(hm_coord.type() == CV_32F);
+    assert(hm_coord.rows == 4);
+    float scale = hm_coord.at<float>(3, col);
+    if (!std::isfinite(scale)) { return false; }
+    hm_coord.col(col) /= scale;
+    if (!std::isfinite(hm_coord.at<float>(0, col)) ||
+        !std::isfinite(hm_coord.at<float>(1, col)) ||
+        !std::isfinite(hm_coord.at<float>(2, col))) {
+        return false;
+    }
+    return true;
+}
+
 int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
                                         const cv::Mat &tcw1,
                                         const cv::Mat &Rcw2,
@@ -169,6 +141,54 @@ int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
         cnt_inlier += 1;
     }
     return cnt_inlier;
+}
+
+void Frontend::filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
+                                      const std::vector<cv::KeyPoint> &kpts2,
+                                      std::vector<unsigned char> &mask,
+                                      const int topK) {
+    assert(kpts1.size() == kpts2.size());
+    auto ang_diff_index = [](double diff_ang) {
+        if (diff_ang < 0) { diff_ang += 360; }
+        return (int) (diff_ang / 3.6);
+    };
+    std::vector<cv::Point2f> pts1, pts2;
+    pts1.reserve(kpts1.size());
+    pts2.reserve(kpts2.size());
+    Histogram<double> histo(101, ang_diff_index);
+    std::vector<double> ang_diff;
+    for (int i = 0; i < (int) kpts1.size(); ++i) {
+        double diff = kpts1[i].angle - kpts2[i].angle;
+        histo.insert_element(diff);
+        ang_diff.push_back(diff);
+
+        pts1.push_back(kpts1[i].pt);
+        pts2.push_back(kpts2[i].pt);
+    }
+    mask = std::vector<unsigned char>(pts1.size(), 1);
+    histo.cal_topK(topK);
+    for (int i = 0; i < (int) kpts1.size(); ++i) {
+        if (!histo.is_topK(ang_diff[i])) { mask[i] = 0; }
+    }
+}
+
+int Frontend::match_between_frames(const vo_ptr<Frame> &left_frame,
+                                   const vo_ptr<Frame> &right_frame,
+                                   std::vector<cv::DMatch> &matches,
+                                   int match_cnt) {
+    matches = match_descriptor(left_frame->get_descs(),
+                               right_frame->get_descs(), 8, 30, match_cnt);
+    std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
+    match_kpt1.reserve(matches.size());
+    match_kpt2.reserve(matches.size());
+    for (auto &match : matches) {
+        match_kpt1.push_back(left_frame->get_kpt_by_index(match.queryIdx));
+        match_kpt2.push_back(right_frame->get_kpt_by_index(match.trainIdx));
+    }
+    std::vector<unsigned char> mask;
+    filter_match_with_kpts(match_kpt1, match_kpt2, mask, 3);
+    matches = filter_by_mask(matches, mask);
+    return int(matches.size());
 }
 
 void Frontend::get_image(const cv::Mat &image, double t) {
@@ -300,8 +320,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     cv::Mat motion_Rcw, motion_Tcw;
     m_motion_pred.predict_pose(m_cur_frame->get_time(), motion_Rcw, motion_Tcw);
     m_cur_frame->set_pose(motion_Rcw, motion_Tcw);
-    TIME_IT(track_with_match(m_keyframe),
-            "Track with match cost ");
+    TIME_IT(track_with_match(m_keyframe), "Track with match cost ");
 
     log_debug_line(m_cur_frame->get_id()
                    << ":\n"
@@ -314,21 +333,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
 
 int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
     std::vector<cv::DMatch> matches;
-    TIME_IT(matches = match_descriptor(o_frame->get_descs(),
-                                       m_cur_frame->get_descs(), 8, 30, 200),
-            "ORB match cost ");
-    std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
-    match_kpt1.reserve(matches.size());
-    match_kpt2.reserve(matches.size());
-    for (auto &match : matches) {
-        match_kpt1.push_back(o_frame->get_kpt_by_index(match.queryIdx));
-        match_kpt2.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx));
-    }
-    std::vector<unsigned char> mask;
-    filter_match_with_kpts(match_kpt1, match_kpt2, mask, 3);
-    matches = filter_by_mask(matches, mask);
-    match_kpt1 = filter_by_mask(match_kpt1, mask);
-    match_kpt2 = filter_by_mask(match_kpt2, mask);
+    match_between_frames(o_frame, m_cur_frame, matches, CNT_MATCHES);
     log_debug_line(matches.size() << " matches after filter.");
 
     std::vector<cv::Matx31f> pt_coords;
