@@ -77,7 +77,8 @@ private:
 
     int initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
-    int track_with_match(const vo_ptr<Frame> &o_frame);
+    int track_with_match(const std::vector<cv::DMatch> &matches,
+                         const vo_ptr<Frame> &ref_frame);
     int set_new_map_points(const vo_ptr<Frame> &ref_frame,
                            const cv::Mat &new_tri_res,
                            const std::vector<cv::DMatch> &matches,
@@ -86,6 +87,9 @@ private:
         if (m_map) { m_map->insert_map_points(points); }
     }
     void select_new_keyframe(const vo_ptr<Frame> &new_keyframe);
+
+    void _triangulate_with_match(const std::vector<cv::DMatch> &matches,
+                                 const vo_ptr<Frame> &ref_frame);
 
 private:
     static constexpr int CNT_KEY_PTS = 1000;
@@ -96,7 +100,7 @@ private:
     State m_state;
 
     vo_ptr<Frame> m_keyframe;
-    vo_ptr<Frame> m_candidate;
+    vo_ptr<Frame> m_candidate_frame;
     vo_ptr<Frame> m_cur_frame;
     vo_ptr<Frame> m_last_frame;
 

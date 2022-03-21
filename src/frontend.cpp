@@ -317,10 +317,44 @@ int Frontend::initialize(const cv::Mat &image, double t) {
 bool Frontend::tracking(const cv::Mat &image, double t) {
     // todo: relocalization(both model fails)
     // todo: camera dist coeff?
+    assert(m_keyframe);
     cv::Mat motion_Rcw, motion_Tcw;
     m_motion_pred.predict_pose(m_cur_frame->get_time(), motion_Rcw, motion_Tcw);
     m_cur_frame->set_pose(motion_Rcw, motion_Tcw);
-    TIME_IT(track_with_match(m_keyframe), "Track with match cost ");
+
+    std::vector<cv::DMatch> match_keyframe;
+    std::vector<bool> tri_inliers_keyframe;
+    cv::Mat tri_res_keyframe;
+    TIME_IT(match_between_frames(m_keyframe, m_cur_frame, match_keyframe,
+                                 CNT_MATCHES),
+            "Match with keyframe cost ");
+    track_with_match(match_keyframe, m_keyframe);
+    _triangulate_with_match(match_keyframe, m_keyframe);
+
+    if (m_candidate_frame) {
+        std::vector<cv::DMatch> match_candidate;
+        cv::Mat tri_res_candidate;
+        std::vector<bool> tri_inliers_candidate;
+        TIME_IT(match_between_frames(m_candidate_frame, m_cur_frame,
+                                     match_candidate, CNT_MATCHES),
+                "Match with candidate frame cost ");
+        _triangulate_with_match(match_candidate, m_candidate_frame);
+    }
+
+    if (!m_candidate_frame) {
+        m_candidate_frame = m_cur_frame;
+        log_debug_line("Select Frame " << m_cur_frame->get_id()
+                                       << " as candidate frame.");
+    } else {
+        if (m_candidate_frame->get_set_cnt() > 200) {
+            m_keyframe = m_candidate_frame;
+            m_candidate_frame = m_cur_frame;
+            log_debug_line("Select Frame " << m_keyframe->get_id()
+                                           << " as key frame.");
+            log_debug_line("Select Frame " << m_candidate_frame->get_id()
+                                           << " as candidate frame.");
+        }
+    }
 
     log_debug_line(m_cur_frame->get_id()
                    << ":\n"
@@ -331,24 +365,22 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     return true;
 }
 
-int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
-    std::vector<cv::DMatch> matches;
-    match_between_frames(o_frame, m_cur_frame, matches, CNT_MATCHES);
-    log_debug_line(matches.size() << " matches after filter.");
-
+int Frontend::track_with_match(const std::vector<cv::DMatch> &matches,
+                               const vo_ptr<Frame> &ref_frame) {
     std::vector<cv::Matx31f> pt_coords;
     std::vector<cv::Point2f> img_pts;
     std::vector<cv::Point2f> new_img_pt1, new_img_pt2;
     std::vector<cv::DMatch> new_match, old_match;
     for (auto &match : matches) {
-        if (o_frame->is_pt_set(match.queryIdx)) {
+        if (ref_frame->is_pt_set(match.queryIdx)) {
             old_match.push_back(match);
             pt_coords.push_back(
-                    o_frame->get_map_pt(match.queryIdx)->get_coord());
+                    ref_frame->get_map_pt(match.queryIdx)->get_coord());
             img_pts.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
         } else {
             new_match.push_back(match);
-            new_img_pt1.push_back(o_frame->get_kpt_by_index(match.queryIdx).pt);
+            new_img_pt1.push_back(
+                    ref_frame->get_kpt_by_index(match.queryIdx).pt);
             new_img_pt2.push_back(
                     m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
         }
@@ -369,37 +401,49 @@ int Frontend::track_with_match(const vo_ptr<Frame> &o_frame) {
             cnt_inlier += 1;
             inlier_coords.push_back(pt_coords[i]);
             inlier_img_pts.push_back(img_pts[i]);
-            m_cur_frame->set_map_pt(old_match[i].trainIdx,
-                                    o_frame->get_map_pt(old_match[i].queryIdx));
+
+            if (!m_cur_frame->is_pt_set(old_match[i].trainIdx)) {
+                m_cur_frame->set_map_pt(
+                        old_match[i].trainIdx,
+                        ref_frame->get_map_pt(old_match[i].queryIdx));
+            }
         }
     }
     log_debug_line(cnt_inlier << " inliers after pnp ransac");
     pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_cur_frame->set_pose(Rcw, tcw);
+    return int(cnt_inlier);
+}
 
-    int cnt_new_map_pt = 0;
-    if (!new_img_pt1.empty() && o_frame->get_id() + 1 < m_cur_frame->get_id()) {
-        cv::Mat tri_res;
-        cv::Mat proj_mat1 =
-                get_proj_mat(m_camera.get_intrinsic_mat(), o_frame->get_Rcw(),
-                             o_frame->get_Tcw());
-        cv::Mat proj_mat2 =
-                get_proj_mat(m_camera.get_intrinsic_mat(),
-                             m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw());
-        cv::triangulatePoints(proj_mat1, proj_mat2, new_img_pt1, new_img_pt2,
-                              tri_res);
-        std::vector<bool> tri_inliers;
-        filter_triangulate_points(tri_res, o_frame->get_Rcw(),
-                                  o_frame->get_Tcw(), m_cur_frame->get_Rcw(),
-                                  m_cur_frame->get_Tcw(), new_img_pt1,
-                                  new_img_pt2, tri_inliers);
-        log_debug_line("Triangulate with transition " << cv::norm(
-                               m_cur_frame->get_Tcw() - o_frame->get_Tcw()));
-        cnt_new_map_pt =
-                set_new_map_points(o_frame, tri_res, new_match, tri_inliers);
+void Frontend::_triangulate_with_match(const std::vector<cv::DMatch> &matches,
+                                       const vo_ptr<Frame> &ref_frame) {
+    std::vector<cv::Point2f> img_pt1, img_pt2;
+    std::vector<cv::DMatch> valid_matches;
+    cv::Mat tri_res;
+    std::vector<bool> inliers;
+    for (auto &match : matches) {
+        if (!ref_frame->is_pt_set(match.queryIdx) &&
+            !m_cur_frame->is_pt_set(match.trainIdx)) {
+            img_pt1.push_back(ref_frame->get_kpt_by_index(match.queryIdx).pt);
+            img_pt2.push_back(m_cur_frame->get_kpt_by_index(match.trainIdx).pt);
+            valid_matches.push_back(match);
+        }
     }
-    log_debug_line(cnt_new_map_pt << " new map points.");
-    return cnt_new_map_pt;
+    cv::Mat proj_mat1 =
+            get_proj_mat(m_camera.get_intrinsic_mat(), ref_frame->get_Rcw(),
+                         ref_frame->get_Tcw());
+    cv::Mat proj_mat2 =
+            get_proj_mat(m_camera.get_intrinsic_mat(), m_cur_frame->get_Rcw(),
+                         m_cur_frame->get_Tcw());
+    cv::triangulatePoints(proj_mat1, proj_mat2, img_pt1, img_pt2, tri_res);
+
+    filter_triangulate_points(tri_res, ref_frame->get_Rcw(),
+                              ref_frame->get_Tcw(), m_cur_frame->get_Rcw(),
+                              m_cur_frame->get_Tcw(), img_pt1, img_pt2,
+                              inliers);
+    int total_new_mpt =
+            set_new_map_points(ref_frame, tri_res, valid_matches, inliers);
+    log_debug_line("Create " << total_new_mpt << " new map points.");
 }
 
 int Frontend::set_new_map_points(const vo_ptr<Frame> &ref_frame,
