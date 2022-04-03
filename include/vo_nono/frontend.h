@@ -65,11 +65,11 @@ private:
                                          const std::vector<cv::Point2f> &pts1,
                                          const std::vector<cv::Point2f> &pts2,
                                          std::vector<bool> &inliers,
-                                         double ang_cos_th = 0.9999999);
+                                         double grad_th);
     static void filter_match_with_kpts(const std::vector<cv::KeyPoint> &kpts1,
                                        const std::vector<cv::KeyPoint> &kpts2,
                                        std::vector<unsigned char> &mask,
-                                       const int topK);
+                                       int topK);
     static int match_between_frames(const vo_ptr<Frame> &left_frame,
                                     const vo_ptr<Frame> &right_frame,
                                     std::vector<cv::DMatch> &matches,
@@ -100,7 +100,6 @@ private:
     State m_state;
 
     vo_ptr<Frame> m_keyframe;
-    vo_ptr<Frame> m_candidate_frame;
     vo_ptr<Frame> m_cur_frame;
     vo_ptr<Frame> m_last_frame;
 

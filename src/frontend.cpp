@@ -110,7 +110,7 @@ int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
                                         const std::vector<cv::Point2f> &pts1,
                                         const std::vector<cv::Point2f> &pts2,
                                         std::vector<bool> &inliers,
-                                        double ang_cos_th) {
+                                        double grad_th) {
     assert(tri.cols == (int) pts1.size());
     assert(tri.cols == (int) pts2.size());
     int cnt_inlier = 0;
@@ -130,10 +130,12 @@ int Frontend::filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
             continue;
         }
         // compute parallax
-        cv::Mat op1 = coord + tcw1;// (coord - (-tcw1) = coord + tcw1)
+        cv::Mat op1 = (coord + tcw1);// (coord - (-tcw1) = coord + tcw1)
+        op1 /= cv::norm(op1);
         cv::Mat op2 = coord + tcw2;
-        double cos_val = op1.dot(op2) / (cv::norm(op1) * cv::norm(op2));
-        if (cos_val > ang_cos_th) {
+        op2 /= cv::norm(op2);
+        double sin_theta3 = cv::norm(op1.cross(op2));
+        if (grad_th * sin_theta3 * sin_theta3 < 1.0) {
             inliers[i] = false;
             continue;
         }
@@ -199,8 +201,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     cv::Mat dscpts;
     TIME_IT(detect_and_compute(image, kpts, dscpts, CNT_KEY_PTS),
             "Detect keypoint cost ");
-    m_cur_frame = std::make_shared<Frame>(
-            Frame::create_frame(dscpts, kpts, m_camera, t));
+    m_cur_frame = std::make_shared<Frame>(Frame::create_frame(dscpts, kpts, t));
     m_cur_frame->img = image;
 
     if (m_state == State::Start) {
@@ -287,7 +288,7 @@ int Frontend::initialize(const cv::Mat &image, double t) {
     std::vector<bool> inliers;
     int cnt_new_pt = filter_triangulate_points(
             tri_res, m_keyframe->get_Rcw(), m_keyframe->get_Tcw(), Rcw, tcw,
-            matched_pt1, matched_pt2, inliers);
+            matched_pt1, matched_pt2, inliers, 10000);
     if (cnt_new_pt < 40) { return -2; }
 
     double scale = 3;
@@ -329,32 +330,12 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
                                  CNT_MATCHES),
             "Match with keyframe cost ");
     track_with_match(match_keyframe, m_keyframe);
+/*    if (m_cur_frame->get_id() > m_keyframe->get_id() + 20) {
+        _triangulate_with_match(match_keyframe, m_keyframe);
+        m_keyframe = m_cur_frame;
+        log_debug_line("Switch keyframe: " << m_cur_frame->get_id());
+    }*/
     _triangulate_with_match(match_keyframe, m_keyframe);
-
-    if (m_candidate_frame) {
-        std::vector<cv::DMatch> match_candidate;
-        cv::Mat tri_res_candidate;
-        std::vector<bool> tri_inliers_candidate;
-        TIME_IT(match_between_frames(m_candidate_frame, m_cur_frame,
-                                     match_candidate, CNT_MATCHES),
-                "Match with candidate frame cost ");
-        _triangulate_with_match(match_candidate, m_candidate_frame);
-    }
-
-    if (!m_candidate_frame) {
-        m_candidate_frame = m_cur_frame;
-        log_debug_line("Select Frame " << m_cur_frame->get_id()
-                                       << " as candidate frame.");
-    } else {
-        if (m_candidate_frame->get_set_cnt() > 200) {
-            m_keyframe = m_candidate_frame;
-            m_candidate_frame = m_cur_frame;
-            log_debug_line("Select Frame " << m_keyframe->get_id()
-                                           << " as key frame.");
-            log_debug_line("Select Frame " << m_candidate_frame->get_id()
-                                           << " as candidate frame.");
-        }
-    }
 
     log_debug_line(m_cur_frame->get_id()
                    << ":\n"
@@ -429,6 +410,7 @@ void Frontend::_triangulate_with_match(const std::vector<cv::DMatch> &matches,
             valid_matches.push_back(match);
         }
     }
+    if (img_pt1.empty()) { return; }
     cv::Mat proj_mat1 =
             get_proj_mat(m_camera.get_intrinsic_mat(), ref_frame->get_Rcw(),
                          ref_frame->get_Tcw());
@@ -440,7 +422,7 @@ void Frontend::_triangulate_with_match(const std::vector<cv::DMatch> &matches,
     filter_triangulate_points(tri_res, ref_frame->get_Rcw(),
                               ref_frame->get_Tcw(), m_cur_frame->get_Rcw(),
                               m_cur_frame->get_Tcw(), img_pt1, img_pt2,
-                              inliers);
+                              inliers, 10000);
     int total_new_mpt =
             set_new_map_points(ref_frame, tri_res, valid_matches, inliers);
     log_debug_line("Create " << total_new_mpt << " new map points.");

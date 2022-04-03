@@ -21,7 +21,7 @@ public:
 public:
     static Frame create_frame(cv::Mat descriptor,
                               std::vector<cv::KeyPoint> kpts,
-                              const Camera &camera, double time,
+                              double time,
                               cv::Mat Rcw = cv::Mat::eye(3, 3, CV_32F),
                               cv::Mat Tcw = cv::Mat::zeros(3, 1, CV_32F));
 
@@ -93,8 +93,6 @@ public:
         assert(m_descriptor.rows > i);
         return m_descriptor.row(i);
     }
-    int local_match(const cv::Mat &desc, const cv::Point2f &pos, double &dis,
-                    const float dist_th, double lowe_th);
 
 private:
     constexpr static int WIDTH_TOTAL_GRID = 20;
@@ -102,39 +100,14 @@ private:
 
     static vo_id_t frame_id_cnt;
 
-    inline int get_grid_width_id(float x) const {
-        return int(x / m_width_per_grid);
-    }
-
-    inline int get_grid_height_id(float y) const {
-        return int(y / m_height_per_grid);
-    }
-
-    inline int get_grid_id(float x, float y) const {
-        int w_id = get_grid_width_id(x), h_id = get_grid_height_id(y);
-        assert(w_id <= WIDTH_TOTAL_GRID);
-        assert(h_id <= HEIGHT_TOTAL_GRID);
-        return h_id * WIDTH_TOTAL_GRID + w_id;
-    }
-
     Frame(vo_id_t id, cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
-          double time, cv::Mat Rcw, cv::Mat Tcw, float height, float width)
+          double time, cv::Mat Rcw, cv::Mat Tcw)
         : m_id(id),
           m_descriptor(std::move(descriptor)),
           m_kpts(std::move(kpts)),
           m_time(time),
           m_Rcw(std::move(Rcw)),
-          m_Tcw(std::move(Tcw)),
-          m_height(height),
-          m_width(width),
-          m_height_per_grid(std::ceil(height / HEIGHT_TOTAL_GRID)),
-          m_width_per_grid(std::ceil(width / WIDTH_TOTAL_GRID)),
-          m_grid_to_index((HEIGHT_TOTAL_GRID + 1) * (WIDTH_TOTAL_GRID + 1)) {
-        for (size_t i = 0; i < m_kpts.size(); ++i) {
-            int cur_id = get_grid_id(m_kpts[i].pt.x, m_kpts[i].pt.y);
-            m_grid_to_index[cur_id].push_back((int) i);
-        }
-    }
+          m_Tcw(std::move(Tcw)) {}
 
     vo_id_t m_id;
     cv::Mat m_descriptor;
@@ -146,11 +119,6 @@ private:
 
     // from index of m_kpts to map points
     std::unordered_map<int, std::shared_ptr<MapPoint>> m_pt_mappt;
-
-    // accelerate local search
-    float m_height, m_width;
-    const float m_height_per_grid, m_width_per_grid;
-    std::vector<std::vector<int>> m_grid_to_index;
 };
 }// namespace vo_nono
 
