@@ -10,6 +10,7 @@
 
 #include "vo_nono/camera.h"
 #include "vo_nono/frame.h"
+#include "vo_nono/keypoint/match.h"
 #include "vo_nono/map.h"
 #include "vo_nono/motion.h"
 #include "vo_nono/types.h"
@@ -33,12 +34,6 @@ public:
                                    std::vector<cv::KeyPoint> &kpts,
                                    cv::Mat &dscpts, int nfeatures);
 
-    static std::vector<cv::DMatch> match_descriptor(const cv::Mat &dscpt1,
-                                                    const cv::Mat &dscpt2,
-                                                    float soft_dis_th,
-                                                    float hard_dis_th,
-                                                    int expect_cnt);
-
     static std::vector<cv::DMatch> filter_matches(
             const std::vector<cv::DMatch> &matches,
             const std::vector<cv::KeyPoint> &kpt1,
@@ -57,7 +52,6 @@ public:
     }
 
 private:
-    static bool hm3d_to_euclid(cv::Mat &hm_coord, int col);
     static int filter_triangulate_points(cv::Mat &tri, const cv::Mat &Rcw1,
                                          const cv::Mat &tcw1,
                                          const cv::Mat &Rcw2,
@@ -70,30 +64,28 @@ private:
                                        const std::vector<cv::KeyPoint> &kpts2,
                                        std::vector<unsigned char> &mask,
                                        int topK);
-    static int match_between_frames(const vo_ptr<Frame> &left_frame,
-                                    const vo_ptr<Frame> &right_frame,
-                                    std::vector<cv::DMatch> &matches,
-                                    int match_cnt);
 
+    int match_between_frames(const vo_ptr<Frame> &ref_frame,
+                             std::vector<cv::DMatch> &matches, int match_cnt);
     int initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
     int track_with_match(const std::vector<cv::DMatch> &matches,
                          const vo_ptr<Frame> &ref_frame);
+    int track_with_local_points();
     int set_new_map_points(const vo_ptr<Frame> &ref_frame,
                            const cv::Mat &new_tri_res,
                            const std::vector<cv::DMatch> &matches,
                            const std::vector<bool> &inliers);
-    void insert_map_points(std::vector<vo_ptr<MapPoint>> &points) {
-        if (m_map) { m_map->insert_map_points(points); }
-    }
     void select_new_keyframe(const vo_ptr<Frame> &new_keyframe);
 
     void _triangulate_with_match(const std::vector<cv::DMatch> &matches,
                                  const vo_ptr<Frame> &ref_frame);
 
 private:
+    static constexpr int CNT_INIT_MATCHES = 500;
     static constexpr int CNT_KEY_PTS = 1000;
     static constexpr int CNT_MATCHES = 200;
+    static constexpr int CNT_MIN_MATCHES = 20;
 
     FrontendConfig m_config;
     Camera m_camera;
@@ -102,6 +94,7 @@ private:
     vo_ptr<Frame> m_keyframe;
     vo_ptr<Frame> m_cur_frame;
     vo_ptr<Frame> m_last_frame;
+    vo_ptr<ORBMatcher> m_matcher;
 
     vo_ptr<Map> m_map;
 

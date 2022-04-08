@@ -4,8 +4,11 @@
 #include <iostream>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
+#include <random>
 
+#include "vo_nono/camera.h"
 #include "vo_nono/motion.h"
+#include "vo_nono/optim.h"
 #include "vo_nono/util.h"
 
 cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
@@ -127,19 +130,11 @@ void test_motion() {
 void test_histogram() {
     auto int_indexer = [](int a) { return a; };
     vo_nono::Histogram<int> histo(100, int_indexer);
-    for (int i = 0; i < 100; ++i) {
-        histo.insert_element(i);
-    }
+    for (int i = 0; i < 100; ++i) { histo.insert_element(i); }
     histo.cal_topK(1);
-    for (int i = 0; i < 100; ++i) {
-        assert(histo.is_topK(i));
-    }
-    for (int i = 0; i < 50; ++i) {
-        histo.insert_element(i);
-    }
-    for (int i = 0; i < 75; ++i) {
-        histo.insert_element(i);
-    }
+    for (int i = 0; i < 100; ++i) { assert(histo.is_topK(i)); }
+    for (int i = 0; i < 50; ++i) { histo.insert_element(i); }
+    for (int i = 0; i < 75; ++i) { histo.insert_element(i); }
     histo.cal_topK(51);
     for (int i = 0; i < 100; ++i) {
         if (i < 75) {
@@ -150,7 +145,73 @@ void test_histogram() {
     }
 }
 
+void test_bundle_adjustment() {
+    using namespace vo_nono;
+    cv::Mat intrinsic_mat =
+            (cv::Mat_<float>(3, 3) << 500, 0, 300, 0, 500, 250, 0, 0, 1);
+    Camera camera(intrinsic_mat, 680, 420);
+    cv::Mat pose1 =
+            (cv::Mat_<float>(3, 4) << 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0);
+    cv::Mat pose2 =
+            (cv::Mat_<float>(3, 4) << 0, -1, 0, 500, 1, 0, 0, 0, 0, 0, 1, 0);
+
+    std::vector<cv::Mat> points, noise_points;
+    std::vector<cv::Point2f> proj[2];
+    constexpr int pt_cnt = 20;
+    for (int i = 0; i < pt_cnt; ++i) {
+        cv::Mat coord = (cv::Mat_<float>(3, 1) << i + 2, 4 * i + 3, 500);
+        points.push_back(coord);
+        cv::Mat proj1 = pose1.colRange(0, 3) * coord + pose1.col(3);
+        cv::Mat proj2 = pose2.colRange(0, 3) * coord + pose2.col(3);
+        proj1 = intrinsic_mat * proj1;
+        proj2 = intrinsic_mat * proj2;
+        proj1 /= proj1.at<float>(2);
+        proj2 /= proj2.at<float>(2);
+        proj[0].emplace_back(
+                cv::Point2f(proj1.at<float>(0), proj1.at<float>(1)));
+        proj[1].emplace_back(
+                cv::Point2f(proj2.at<float>(0), proj2.at<float>(1)));
+    }
+
+    OptimizeGraph graph(camera, 2, pt_cnt);
+    std::random_device rd_device;
+    std::mt19937 gen(rd_device());
+    std::uniform_real_distribution<> dis(-1.0, 1.0);
+
+    cv::Mat noise_pose1 = pose1;
+    cv::Mat noise_pose2 = pose2;
+    for (int i = 0; i < points.size(); ++i) {
+        cv::Mat noise_point = points[i].clone();
+        noise_point.at<float>(0) += dis(gen);
+        noise_point.at<float>(1) += dis(gen);
+        noise_point.at<float>(2) += dis(gen);
+        noise_points.push_back(noise_point);
+    }
+    graph.cam_poses[0] = noise_pose1;
+    graph.cam_poses[1] = noise_pose2;
+    for (int i = 0; i < points.size(); ++i) {
+        graph.points[i] = noise_points[i];
+        for (int j = 0; j < 2; ++j) { graph.add_edge(j, i, proj[j][i]); }
+    }
+    Optimizer::bundle_adjustment(graph, 40);
+    for (int i = 0; i < 2; ++i) {
+        if (i == 0) {
+            std::cout << "Original: " << pose1 << std::endl;
+            std::cout << "Noise: " << noise_pose1 << std::endl;
+        } else {
+            std::cout << "Original: " << pose2 << std::endl;
+            std::cout << "Noise: " << noise_pose2 << std::endl;
+        }
+        std::cout << "Optimized: " << graph.optim_cam_poses[i] << std::endl;
+    }
+    for (int i = 0; i < points.size(); ++i) {
+        std::cout << "Original: " << points[i] << std::endl;
+        std::cout << "Noise: " << noise_points[i] << std::endl;
+        std::cout << "Optimized: " << graph.optim_points[i] << std::endl;
+    }
+}
+
 int main() {
-    test_histogram();
+    test_bundle_adjustment();
     return 0;
 }

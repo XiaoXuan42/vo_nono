@@ -32,8 +32,15 @@ public:
         return m_kpts;
     }
     // keypoints that already has corresponding map point
-    [[nodiscard]] size_t get_set_cnt() const { return m_pt_mappt.size(); }
-    [[nodiscard]] size_t get_kpt_cnt() const { return m_kpts.size(); }
+    [[nodiscard]] size_t get_cnt_map_pt() const { return m_pt_mappt.size(); }
+    [[nodiscard]] size_t get_cnt_kpt() const { return m_kpts.size(); }
+    std::vector<vo_ptr<MapPoint>> get_all_map_pts() const {
+        std::vector<vo_ptr<MapPoint>> result;
+        for (auto &pair : m_pt_mappt) {
+            result.push_back(pair.second);
+        }
+        return result;
+    }
 
     void set_Rcw(const cv::Mat &Rcw) {
         assert(Rcw.rows == 3);
@@ -95,9 +102,6 @@ public:
     }
 
 private:
-    constexpr static int WIDTH_TOTAL_GRID = 20;
-    constexpr static int HEIGHT_TOTAL_GRID = 20;
-
     static vo_id_t frame_id_cnt;
 
     Frame(vo_id_t id, cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,

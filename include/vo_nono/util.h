@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <ctime>
+#include <iostream>
 #include <opencv2/core.hpp>
 #include <random>
 
@@ -119,23 +120,6 @@ template<typename T, typename U>
 #define unimplemented() assert(false);
 #define float_eq_zero(A) (fabs((double) (A)) < vo_nono::EPS)
 
-#ifdef NDEBUG
-#define log_debug(contents) ;
-#define log_debug_line(contents) ;
-#define log_debug_pos(contents) ;
-#define TIMT_IT(CODE, msg) \
-    do { contents; } while (0);
-#else
-#include <chrono>
-#include <iostream>
-
-#define log_debug(contents) (std::cout << contents)
-
-#define log_debug_line(contents) (std::cout << contents << std::endl)
-
-#define log_debug_pos(contents) \
-    (std::cout << __FUNCTION__ << ";" << __LINE__ << std::endl << contents)
-
 #define TIME_IT(CODE, msg)                                                     \
     do {                                                                       \
         std::chrono::steady_clock::time_point t1 =                             \
@@ -146,8 +130,23 @@ template<typename T, typename U>
         std::chrono::duration<double> time_used =                              \
                 std::chrono::duration_cast<std::chrono::duration<double>>(t2 - \
                                                                           t1); \
-        log_debug_line(msg << time_used.count() << " seconds.");               \
+        std::cout << (msg) << time_used.count() << " seconds." << std::endl;   \
     } while (0);
+
+#ifdef NDEBUG
+#define log_debug(contents) ;
+#define log_debug_line(contents) ;
+#define log_debug_pos(contents) ;
+#else
+#include <chrono>
+#include <iostream>
+
+#define log_debug(contents) (std::cout << contents)
+
+#define log_debug_line(contents) (std::cout << contents << std::endl)
+
+#define log_debug_pos(contents) \
+    (std::cout << __FUNCTION__ << ";" << __LINE__ << std::endl << contents)
 
 #endif
 
