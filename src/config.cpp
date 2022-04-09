@@ -8,24 +8,25 @@
 
 namespace vo_nono {
 namespace {
+Camera camera_from_yaml_node(const YAML::Node &camera_node) {
+    cv::Mat camera_mat = cv::Mat::zeros(3, 3, CV_32F);
+    camera_mat.at<float>(0, 0) = camera_node["fx"].as<float>();
+    camera_mat.at<float>(1, 1) = camera_node["fy"].as<float>();
+    camera_mat.at<float>(2, 2) = 1.0f;
+    camera_mat.at<float>(0, 2) = camera_node["cx"].as<float>();
+    camera_mat.at<float>(1, 2) = camera_node["cy"].as<float>();
+    auto width = camera_node["width"].as<float>();
+    auto height = camera_node["height"].as<float>();
+    auto camera_res = Camera(camera_mat, width, height);
+
+    if (camera_node["dist"]) {
+        camera_res.set_dist_coeff(camera_node["dist"].as<std::vector<float>>());
+    }
+    return camera_res;
+}
+
 FrontendConfig frontend_config_from_yaml_node(const YAML::Node &node) {
     FrontendConfig res = FrontendConfig();
-    if (node["Camera"]) {
-        const auto camera_node = node["Camera"];
-        cv::Mat camera_mat = cv::Mat::zeros(3, 3, CV_32F);
-        camera_mat.at<float>(0, 0) = camera_node["fx"].as<float>();
-        camera_mat.at<float>(1, 1) = camera_node["fy"].as<float>();
-        camera_mat.at<float>(2, 2) = 1.0f;
-        camera_mat.at<float>(0, 2) = camera_node["cx"].as<float>();
-        camera_mat.at<float>(1, 2) = camera_node["cy"].as<float>();
-        auto width = camera_node["width"].as<float>();
-        auto height = camera_node["height"].as<float>();
-        res.camera = Camera(camera_mat, width, height);
-
-        if (camera_node["dist"]) {
-            res.camera.set_dist_coeff(camera_node["dist"].as<std::vector<float>>());
-        }
-    }
     return res;
 }
 
@@ -34,6 +35,7 @@ SystemConfig sysconf_from_yaml_node(const YAML::Node &node) {
     if (node["frontend"]) {
         res.frontend_config = frontend_config_from_yaml_node(node["frontend"]);
     }
+    if (node["Camera"]) { res.camera = camera_from_yaml_node(node["Camera"]); }
     return res;
 }
 }// namespace

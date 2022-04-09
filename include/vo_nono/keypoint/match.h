@@ -25,7 +25,8 @@ struct ProjMatch {
 
 class ORBMatcher {
 public:
-    ORBMatcher(vo_ptr<Frame> p_frame, const Camera &camera)
+    ORBMatcher(const std::vector<cv::KeyPoint> &kpts, cv::Mat descriptors,
+               const Camera &camera)
         : m_total_width(camera.get_width()),
           m_total_height(camera.get_height()),
           m_width_per_grid(
@@ -34,10 +35,37 @@ public:
           m_height_per_grid(
                   std::ceil((camera.get_height() + HEIGHT_TOTAL_GRID - 1.0f) /
                             HEIGHT_TOTAL_GRID)),
-          mp_frame(std::move(p_frame)),
-          m_camera_intrinsic(camera.get_intrinsic_mat()) {
-        for (size_t i = 0; i < mp_frame->get_kpts().size(); ++i) {
-            cv::KeyPoint cur_kpt = mp_frame->get_kpt_by_index(int(i));
+          m_camera_intrinsic(camera.get_intrinsic_mat()),
+          kpts(kpts),
+          descriptors(std::move(descriptors)),
+          mb_space_hash(false) {}
+
+    std::vector<ProjMatch> match_by_projection(
+            const std::vector<vo_ptr<MapPoint>> &map_points, float dist_th);
+    [[nodiscard]] std::vector<cv::DMatch> match_descriptor_bf(
+            const cv::Mat &o_descpt, float soft_dis_th, float hard_dis_th,
+            int expect_cnt) const;
+
+    static void filter_match_rotation_consistency(
+            const std::vector<cv::KeyPoint> &kpts1,
+            const std::vector<cv::KeyPoint> &kpts2,
+            std::vector<unsigned char> &mask, const int topK);
+
+    void set_estimate_pose(const cv::Mat &Rcw, const cv::Mat &tcw) {
+        assert(Rcw.type() == CV_32F);
+        assert(Rcw.cols == 3);
+        assert(Rcw.rows == 3);
+        assert(tcw.type() == CV_32F);
+        assert(tcw.rows == 3);
+        assert(tcw.cols == 1);
+        m_Rcw = Rcw;
+        m_tcw = tcw;
+    }
+
+    void space_hash() {
+        if (mb_space_hash) { return; }
+        for (size_t i = 0; i < kpts.size(); ++i) {
+            cv::KeyPoint cur_kpt = kpts[i];
             if (m_pyramid_grids.size() <= size_t(cur_kpt.octave)) {
                 m_pyramid_grids.resize(cur_kpt.octave + 1);
             }
@@ -46,14 +74,8 @@ public:
             m_pyramid_grids[cur_kpt.octave].grid[height_id][width_id].push_back(
                     int(i));
         }
+        mb_space_hash = true;
     }
-
-    std::vector<ProjMatch> match_by_projection(
-            const std::vector<vo_ptr<MapPoint>> &map_points, float dist_th);
-    std::vector<cv::DMatch> match_descriptor_bf(const cv::Mat &o_descpt,
-                                                float soft_dis_th,
-                                                float hard_dis_th,
-                                                int expect_cnt);
 
 private:
     constexpr static int WIDTH_TOTAL_GRID = 64;
@@ -89,9 +111,12 @@ private:
 
     const float m_total_width, m_total_height;
     const float m_width_per_grid, m_height_per_grid;
-    vo_ptr<Frame> mp_frame;
     std::vector<KeyPointGrid> m_pyramid_grids;
-    cv::Mat m_camera_intrinsic;
+    cv::Mat m_camera_intrinsic, m_Rcw, m_tcw;
+
+    const std::vector<cv::KeyPoint> &kpts;
+    const cv::Mat descriptors;
+    bool mb_space_hash;
 };
 }// namespace vo_nono
 

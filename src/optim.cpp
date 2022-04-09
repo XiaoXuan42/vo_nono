@@ -18,9 +18,7 @@ Eigen::Vector3d to_vector3d(const cv::Mat &mat) {
     assert(mat.cols == 1);
     assert(mat.rows == 3);
     Eigen::Vector3d res;
-    for (int i = 0; i < 3; ++i) {
-        res(i) = mat.at<float>(i);
-    }
+    for (int i = 0; i < 3; ++i) { res(i) = mat.at<float>(i); }
     return res;
 }
 
@@ -31,13 +29,9 @@ g2o::SE3Quat to_se3quat(const cv::Mat &mat) {
     Eigen::Matrix<double, 3, 3> R;
     Eigen::Matrix<double, 3, 1> t;
     for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            R(i, j) = mat.at<float>(i, j);
-        }
+        for (int j = 0; j < 3; ++j) { R(i, j) = mat.at<float>(i, j); }
     }
-    for (int i = 0; i < 3; ++i) {
-        t(i, 0) = mat.at<float>(i, 3);
-    }
+    for (int i = 0; i < 3; ++i) { t(i, 0) = mat.at<float>(i, 3); }
     return g2o::SE3Quat(R, t);
 }
 
@@ -70,17 +64,18 @@ void Optimizer::bundle_adjustment(OptimizeGraph &graph, int iter_cnt) {
     linear_solver = g2o::make_unique<BaLinearSolver>();
     auto *solver = new g2o::OptimizationAlgorithmLevenberg(
             g2o::make_unique<g2o::BlockSolver_6_3>(std::move(linear_solver)));
-
+    const int cam_sz = int(graph.cam_poses.size());
+    const int pt_sz = int(graph.points.size());
     optimizer.setAlgorithm(solver);
-    for (int i = 0; i < graph.pt_sz; ++i) {
+    for (int i = 0; i < pt_sz; ++i) {
         auto *vp = new g2o::VertexSBAPointXYZ();
-        vp->setId(i + graph.cam_sz);
+        vp->setId(i + cam_sz);
         vp->setMarginalized(true);
         vp->setEstimate(to_vector3d(graph.points[i]));
         optimizer.addVertex(vp);
     }
 
-    for (int i = 0; i < graph.cam_sz; ++i) {
+    for (int i = 0; i < cam_sz; ++i) {
         auto *v_cam = new g2o::VertexSE3Expmap();
         v_cam->setEstimate(to_se3quat(graph.cam_poses[i]));
         v_cam->setId(i);
@@ -89,7 +84,7 @@ void Optimizer::bundle_adjustment(OptimizeGraph &graph, int iter_cnt) {
             auto *e = new g2o::EdgeSE3ProjectXYZ();
             cv::Point2f proj_pt = graph.projects[i][j];
             Eigen::Matrix<double, 2, 1> measurement(proj_pt.x, proj_pt.y);
-            int p_id = graph.graph[i][j] + graph.cam_sz;
+            int p_id = graph.graph[i][j] + cam_sz;
             e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(
                                     optimizer.vertex(p_id)));
             e->setVertex(1,
@@ -111,13 +106,13 @@ void Optimizer::bundle_adjustment(OptimizeGraph &graph, int iter_cnt) {
 
     graph.optim_cam_poses.clear();
     graph.optim_points.clear();
-    for (int i = 0; i < graph.cam_sz; ++i) {
+    for (int i = 0; i < cam_sz; ++i) {
         auto *v_cam = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
         graph.optim_cam_poses.push_back(to_cvmat(v_cam->estimate()));
     }
-    for (int i = 0; i < graph.pt_sz; ++i) {
+    for (int i = 0; i < pt_sz; ++i) {
         auto *v_pt = dynamic_cast<g2o::VertexSBAPointXYZ *>(
-                optimizer.vertex(i + graph.cam_sz));
+                optimizer.vertex(i + cam_sz));
         graph.optim_points.push_back(to_cvmat(v_pt->estimate()));
     }
 }

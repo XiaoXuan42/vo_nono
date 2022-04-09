@@ -7,6 +7,7 @@
 
 namespace vo_nono {
 using vo_id_t = int64_t;
+constexpr vo_id_t vo_id_invalid = -1;
 
 template<typename T>
 using vo_ptr = std::shared_ptr<T>;

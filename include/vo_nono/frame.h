@@ -16,12 +16,8 @@
 namespace vo_nono {
 class Frame {
 public:
-    cv::Mat img;
-
-public:
     static Frame create_frame(cv::Mat descriptor,
-                              std::vector<cv::KeyPoint> kpts,
-                              double time,
+                              std::vector<cv::KeyPoint> kpts, double time,
                               cv::Mat Rcw = cv::Mat::eye(3, 3, CV_32F),
                               cv::Mat Tcw = cv::Mat::zeros(3, 1, CV_32F));
 
@@ -32,15 +28,10 @@ public:
         return m_kpts;
     }
     // keypoints that already has corresponding map point
-    [[nodiscard]] size_t get_cnt_map_pt() const { return m_pt_mappt.size(); }
-    [[nodiscard]] size_t get_cnt_kpt() const { return m_kpts.size(); }
-    std::vector<vo_ptr<MapPoint>> get_all_map_pts() const {
-        std::vector<vo_ptr<MapPoint>> result;
-        for (auto &pair : m_pt_mappt) {
-            result.push_back(pair.second);
-        }
-        return result;
+    [[nodiscard]] size_t get_cnt_map_pt() const {
+        return m_index_to_mappt.size();
     }
+    [[nodiscard]] size_t get_cnt_kpt() const { return m_kpts.size(); }
 
     void set_Rcw(const cv::Mat &Rcw) {
         assert(Rcw.rows == 3);
@@ -73,6 +64,13 @@ public:
         set_Rcw(Rcw);
         set_Tcw(Tcw);
     }
+    void set_pose(const cv::Mat &pose) {
+        assert(pose.type() == CV_32F);
+        assert(pose.rows == 3);
+        assert(pose.cols == 4);
+        set_Rcw(pose.colRange(0, 3));
+        set_Tcw(pose.col(3));
+    }
     [[nodiscard]] cv::Mat get_Rcw() const { return m_Rcw.clone(); }
     [[nodiscard]] cv::Mat get_Tcw() const { return m_Tcw.clone(); }
     [[nodiscard]] cv::Mat get_pose() const {
@@ -83,14 +81,21 @@ public:
     }
 
     void set_map_pt(int i, const std::shared_ptr<MapPoint> &pt) {
-        assert(m_pt_mappt.count(i) == 0);
-        m_pt_mappt.insert({i, pt});
+        assert(m_index_to_mappt.count(i) == 0);
+        m_index_to_mappt.insert({i, pt});
+        m_mappt_to_index.insert({pt->get_id(), i});
     }
     std::shared_ptr<MapPoint> get_map_pt(int i) const {
-        assert(m_pt_mappt.count(i) != 0);
-        return m_pt_mappt.at(i);
+        assert(m_index_to_mappt.count(i) != 0);
+        return m_index_to_mappt.at(i);
     }
-    bool is_pt_set(int i) const { return m_pt_mappt.count(i) != 0; }
+    std::vector<vo_ptr<MapPoint>> get_all_map_pts() const {
+        std::vector<vo_ptr<MapPoint>> res;
+        res.reserve(m_index_to_mappt.size());
+        for (auto &it : m_index_to_mappt) { res.push_back(it.second); }
+        return res;
+    }
+    bool is_index_set(int i) const { return m_index_to_mappt.count(i) != 0; }
 
     cv::KeyPoint get_kpt_by_index(int i) const {
         assert(i < (int) m_kpts.size());
@@ -101,9 +106,8 @@ public:
         return m_descriptor.row(i);
     }
 
-private:
     static vo_id_t frame_id_cnt;
-
+private:
     Frame(vo_id_t id, cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
           double time, cv::Mat Rcw, cv::Mat Tcw)
         : m_id(id),
@@ -122,7 +126,9 @@ private:
     cv::Mat m_Tcw;
 
     // from index of m_kpts to map points
-    std::unordered_map<int, std::shared_ptr<MapPoint>> m_pt_mappt;
+    std::unordered_map<int, std::shared_ptr<MapPoint>> m_index_to_mappt;
+    // from map point's id to index
+    std::unordered_map<vo_id_t, int> m_mappt_to_index;
 };
 }// namespace vo_nono
 

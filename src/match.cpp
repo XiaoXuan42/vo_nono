@@ -8,14 +8,14 @@
 namespace vo_nono {
 std::vector<ProjMatch> ORBMatcher::match_by_projection(
         const std::vector<vo_ptr<MapPoint>> &map_points, float dist_th) {
+    assert(mb_space_hash);
     std::vector<cv::Matx31f> coord3ds;
     std::vector<cv::Point2f> img_pts;
     std::vector<vo_ptr<MapPoint>> map_pts;
     std::vector<double> distances;
     std::unordered_map<int, int> book;
 
-    cv::Mat proj_mat = get_proj_mat(m_camera_intrinsic, mp_frame->get_Rcw(),
-                                    mp_frame->get_Tcw());
+    cv::Mat proj_mat = get_proj_mat(m_camera_intrinsic, m_Rcw, m_tcw);
     for (auto &map_pt : map_points) {
         cv::Point2f proj_img_pt = hm2d_to_euclid2d(
                 proj_mat * euclid3d_to_hm3d(map_pt->get_coord()));
@@ -38,15 +38,13 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
                 for (int j = min_width_id; j <= max_width_id; ++j) {
                     for (auto &level_grid : m_pyramid_grids) {
                         for (auto index : level_grid.grid[i][j]) {
-                            cv::KeyPoint kpt =
-                                    mp_frame->get_kpt_by_index(index);
+                            cv::KeyPoint kpt = kpts[index];
                             if (std::fabs(kpt.pt.x - proj_img_pt.x) > dist_th ||
                                 std::fabs(kpt.pt.y - proj_img_pt.y) > dist_th) {
                                 continue;
                             }
-                            int cur_dis = orb_distance(
-                                    mp_frame->get_desc_by_index(index),
-                                    map_pt->get_desc());
+                            int cur_dis = orb_distance(descriptors.row(index),
+                                                       map_pt->get_desc());
                             if (cur_dis < best_dis) {
                                 best_id = index;
                                 best_dis = cur_dis;
@@ -66,7 +64,7 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
             book[best_id] = int(distances.size());
             distances.push_back(best_dis);
             coord3ds.push_back(coord);
-            img_pts.push_back(mp_frame->get_kpt_by_index(best_id).pt);
+            img_pts.push_back(kpts[best_id].pt);
             map_pts.push_back(map_pt);
         }
     }
@@ -119,12 +117,41 @@ std::vector<cv::DMatch> _filter_match_by_dis_th(std::vector<cv::DMatch> matches,
 std::vector<cv::DMatch> ORBMatcher::match_descriptor_bf(const cv::Mat &o_descpt,
                                                         float soft_dis_th,
                                                         float hard_dis_th,
-                                                        int expect_cnt) {
+                                                        int expect_cnt) const {
     assert(hard_dis_th >= soft_dis_th);
     std::vector<cv::DMatch> matches;
     auto matcher = cv::BFMatcher(cv::NORM_HAMMING, true);
-    matcher.match(o_descpt, mp_frame->get_descs(), matches);
+    matcher.match(o_descpt, descriptors, matches);
     return _filter_match_by_dis_th(std::move(matches), soft_dis_th, hard_dis_th,
                                    expect_cnt);
+}
+
+void ORBMatcher::filter_match_rotation_consistency(
+        const std::vector<cv::KeyPoint> &kpts1,
+        const std::vector<cv::KeyPoint> &kpts2,
+        std::vector<unsigned char> &mask, const int topK) {
+    assert(kpts1.size() == kpts2.size());
+    auto ang_diff_index = [](double diff_ang) {
+        if (diff_ang < 0) { diff_ang += 360; }
+        return (int) (diff_ang / 3.6);
+    };
+    std::vector<cv::Point2f> pts1, pts2;
+    pts1.reserve(kpts1.size());
+    pts2.reserve(kpts2.size());
+    Histogram<double> histo(101, ang_diff_index);
+    std::vector<double> ang_diff;
+    for (int i = 0; i < (int) kpts1.size(); ++i) {
+        double diff = kpts1[i].angle - kpts2[i].angle;
+        histo.insert_element(diff);
+        ang_diff.push_back(diff);
+
+        pts1.push_back(kpts1[i].pt);
+        pts2.push_back(kpts2[i].pt);
+    }
+    mask = std::vector<unsigned char>(pts1.size(), 1);
+    histo.cal_topK(topK);
+    for (int i = 0; i < (int) kpts1.size(); ++i) {
+        if (!histo.is_topK(ang_diff[i])) { mask[i] = 0; }
+    }
 }
 }// namespace vo_nono

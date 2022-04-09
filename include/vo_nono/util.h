@@ -91,17 +91,6 @@ void rotation_mat_to_quaternion(const cv::Mat &R, T Q[]) {
 
 cv::Mat quaternion_to_rotation_mat(const float Q[]);
 
-inline cv::Mat get_proj_mat(const cv::Mat &camera_intrin, const cv::Mat &Rcw,
-                            const cv::Mat &t_cw) {
-    assert(Rcw.type() == CV_32F);
-    assert(t_cw.type() == CV_32F);
-    cv::Mat proj = cv::Mat::zeros(3, 4, CV_32F);
-    Rcw.copyTo(proj.rowRange(0, 3).colRange(0, 3));
-    t_cw.copyTo(proj.rowRange(0, 3).col(3));
-    proj = camera_intrin * proj;
-    return proj;
-}
-
 template<typename T, typename U>
 [[nodiscard]] inline std::vector<T> filter_by_mask(
         const std::vector<T> &targets, const std::vector<U> &mask) {

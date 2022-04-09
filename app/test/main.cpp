@@ -173,24 +173,24 @@ void test_bundle_adjustment() {
                 cv::Point2f(proj2.at<float>(0), proj2.at<float>(1)));
     }
 
-    OptimizeGraph graph(camera, 2, pt_cnt);
+    OptimizeGraph graph(camera);
     std::random_device rd_device;
     std::mt19937 gen(rd_device());
     std::uniform_real_distribution<> dis(-1.0, 1.0);
 
     cv::Mat noise_pose1 = pose1;
     cv::Mat noise_pose2 = pose2;
+    graph.add_cam_pose(noise_pose1);
+    graph.add_cam_pose(noise_pose2);
     for (int i = 0; i < points.size(); ++i) {
         cv::Mat noise_point = points[i].clone();
         noise_point.at<float>(0) += dis(gen);
         noise_point.at<float>(1) += dis(gen);
         noise_point.at<float>(2) += dis(gen);
         noise_points.push_back(noise_point);
+        graph.add_point(noise_point);
     }
-    graph.cam_poses[0] = noise_pose1;
-    graph.cam_poses[1] = noise_pose2;
     for (int i = 0; i < points.size(); ++i) {
-        graph.points[i] = noise_points[i];
         for (int j = 0; j < 2; ++j) { graph.add_edge(j, i, proj[j][i]); }
     }
     Optimizer::bundle_adjustment(graph, 40);
