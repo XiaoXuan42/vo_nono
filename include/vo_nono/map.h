@@ -83,7 +83,7 @@ public:
         : mr_camera(camera),
           mb_shutdown(false),
           mb_global_ba(false) {
-        //mt_global_ba = std::thread(&Map::global_bundle_adjustment, this);
+        mt_global_ba = std::thread(&Map::global_bundle_adjustment, this);
     }
     Map(const Map &) = delete;
     ~Map() { shutdown(); }
@@ -135,7 +135,7 @@ public:
             mb_shutdown = true;
             m_global_ba_cv.notify_all();
         }
-        //mt_global_ba.join();
+        mt_global_ba.join();
     }
 
     void initialize(FrameInfo &keyframe_info, FrameInfo &ref_frame_info,
