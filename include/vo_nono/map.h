@@ -26,6 +26,7 @@ struct FrameInfo {
     std::vector<vo_id_t> map_pt_id;
     std::vector<cv::Mat> map_coord;
     cv::Mat image;
+    int cnt_pt_set;
 
     void clear() {
         frame_id = vo_id_invalid;
@@ -36,6 +37,7 @@ struct FrameInfo {
         image = cv::Mat();
         Rcw = cv::Mat();
         tcw = cv::Mat();
+        cnt_pt_set = 0;
     }
 
     void init_map_info() {
@@ -44,6 +46,7 @@ struct FrameInfo {
         map_coord.resize(kpts.size());
         Rcw = cv::Mat::eye(3, 3, CV_32F);
         tcw = cv::Mat::zeros(3, 1, CV_32F);
+        cnt_pt_set = 0;
     }
 
     [[nodiscard]] bool is_index_set(int i) const {
@@ -55,8 +58,19 @@ struct FrameInfo {
     void set_point(int i, vo_id_t id, const cv::Mat &coord) {
         assert(map_pt_id.size() == map_coord.size());
         assert(i < int(map_pt_id.size()));
+        if (map_pt_id[i] == vo_id_invalid) { cnt_pt_set += 1; }
         map_pt_id[i] = id;
         map_coord[i] = coord;
+    }
+
+    vo_id_t get_point_id(int i) {
+        assert(map_pt_id[i] != vo_id_invalid);
+        return map_pt_id[i];
+    }
+
+    cv::Mat get_point_coord(int i) {
+        assert(map_pt_id[i] != vo_id_invalid);
+        return map_coord[i].clone();
     }
 
     void update(const vo_ptr<Frame> &pframe) {
@@ -68,10 +82,12 @@ struct FrameInfo {
         time = pframe->get_time();
         map_pt_id = std::vector<vo_id_t>(kpts.size(), vo_id_invalid);
         map_coord = std::vector<cv::Mat>(kpts.size());
+        cnt_pt_set = 0;
         for (int i = 0; i < int(kpts.size()); ++i) {
             if (pframe->is_index_set(i)) {
                 map_pt_id[i] = pframe->get_map_pt(i)->get_id();
                 map_coord[i] = pframe->get_map_pt(i)->get_coord();
+                cnt_pt_set += 1;
             }
         }
     }
@@ -83,18 +99,12 @@ public:
         : mr_camera(camera),
           mb_shutdown(false),
           mb_global_ba(false) {
-        mt_global_ba = std::thread(&Map::global_bundle_adjustment, this);
+        //mt_global_ba = std::thread(&Map::global_bundle_adjustment, this);
     }
     Map(const Map &) = delete;
     ~Map() { shutdown(); }
 
     using Trajectory = std::vector<std::pair<double, cv::Mat>>;
-    void insert_key_frame(const vo_ptr<Frame> &frame) {
-        m_keyframes.push_back(frame);
-        m_cur_keyframe = frame;
-        mb_global_ba = true;
-        m_global_ba_cv.notify_all();
-    }
 
     void global_bundle_adjustment();
 
@@ -135,7 +145,7 @@ public:
             mb_shutdown = true;
             m_global_ba_cv.notify_all();
         }
-        mt_global_ba.join();
+        //mt_global_ba.join();
     }
 
     void initialize(FrameInfo &keyframe_info, FrameInfo &ref_frame_info,
@@ -155,11 +165,9 @@ public:
 
         for (size_t i = 0; i < matches.size(); ++i) {
             if (triangulate_inlier[i]) {
-                auto new_pt =
-                        std::make_shared<MapPoint>(MapPoint::create_map_point(
-                                triangulate_res[i],
-                                p_keyframe->get_desc_by_index(
-                                        matches[i].queryIdx)));
+                auto new_pt = create_new_map_pt(
+                        triangulate_res[i],
+                        p_keyframe->get_desc_by_index(matches[i].queryIdx));
                 p_keyframe->set_map_pt(matches[i].queryIdx, new_pt);
                 p_refframe->set_map_pt(matches[i].trainIdx, new_pt);
                 keyframe_info.set_point(matches[i].queryIdx, new_pt->get_id(),
@@ -173,11 +181,19 @@ public:
 
     void insert_frame(FrameInfo &frame_info,
                       const std::vector<cv::DMatch> &matches,
-                      const std::vector<bool> &match_inlier) {
+                      const std::vector<bool> &match_inlier,
+                      bool b_new_keyframe) {
         vo_ptr<Frame> p_frame = std::make_shared<Frame>(Frame::create_frame(
                 frame_info.descriptors, std::move(frame_info.kpts),
                 frame_info.time, frame_info.Rcw.clone(),
                 frame_info.tcw.clone()));
+        for (int i = 0; i < int(frame_info.map_pt_id.size()); ++i) {
+            if (frame_info.is_index_set(i)) {
+                assert(m_id_to_map_pt.count(frame_info.map_pt_id[i]));
+                p_frame->set_map_pt(int(i),
+                                    m_id_to_map_pt[frame_info.map_pt_id[i]]);
+            }
+        }
 
         std::vector<cv::Mat> tri_res;
         std::vector<bool> tri_inliers;
@@ -185,19 +201,26 @@ public:
                 m_cur_keyframe.get(), p_frame.get(),
                 mr_camera.get_intrinsic_mat(), matches, tri_res, tri_inliers,
                 10000);
+        int new_tri_cnt = 0;
         for (int i = 0; i < int(tri_res.size()); ++i) {
             if (tri_inliers[i] &&
                 !m_cur_keyframe->is_index_set(matches[i].queryIdx) &&
                 !p_frame->is_index_set(matches[i].trainIdx)) {
-                auto new_pt =
-                        std::make_shared<MapPoint>(MapPoint::create_map_point(
-                                tri_res[i], m_cur_keyframe->get_desc_by_index(
-                                                    matches[i].queryIdx)));
+                auto new_pt = create_new_map_pt(
+                        tri_res[i],
+                        m_cur_keyframe->get_desc_by_index(matches[i].queryIdx));
                 m_cur_keyframe->set_map_pt(matches[i].queryIdx, new_pt);
                 p_frame->set_map_pt(matches[i].trainIdx, new_pt);
+
+                new_tri_cnt += 1;
             }
         }
+        log_debug_line("Triangulated " << new_tri_cnt << " new map points.");
         m_frames.push_back(p_frame);
+
+        log_debug_line("Insert frame with " << p_frame->get_cnt_map_pt()
+                                            << " points set.");
+        if (b_new_keyframe) { insert_key_frame(p_frame); }
     }
 
     void update_keyframe_info(FrameInfo &key_frame_info) {
@@ -207,9 +230,26 @@ public:
     std::mutex map_global_mutex;
 
 private:
+    vo_ptr<MapPoint> create_new_map_pt(const cv::Mat &coord,
+                                       const cv::Mat &descriptor) {
+        auto res = std::make_shared<MapPoint>(
+                MapPoint::create_map_point(coord, descriptor));
+        m_id_to_map_pt[res->get_id()] = res;
+        return res;
+    }
+
+    void insert_key_frame(const vo_ptr<Frame> &frame) {
+        log_debug_line("Switch keyframe: " << frame->get_id());
+        m_keyframes.push_back(frame);
+        m_cur_keyframe = frame;
+        mb_global_ba = true;
+        m_global_ba_cv.notify_all();
+    }
+
     std::vector<vo_ptr<Frame>> m_keyframes;
     std::vector<vo_ptr<Frame>> m_frames;
     vo_ptr<Frame> m_cur_keyframe;
+    std::unordered_map<vo_id_t, vo_ptr<MapPoint>> m_id_to_map_pt;
 
     const Camera &mr_camera;
 

@@ -50,7 +50,7 @@ int main(int argc, const char *argv[]) {
         std::cout << "---------------------------------------------------------"
                      "----"
                   << std::endl;
-        if (frame_id >= 160) { break; }
+        if (frame_id >= 800) { break; }
         frame_id += 1;
     }
 

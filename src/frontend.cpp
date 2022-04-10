@@ -18,10 +18,11 @@ namespace {
                                    const cv::Mat &img1, const cv::Mat &img2,
                                    const std::vector<cv::KeyPoint> &kpts1,
                                    const std::vector<cv::KeyPoint> &kpts2,
-                                   const std::vector<cv::DMatch> &matches) {
+                                   const std::vector<cv::DMatch> &matches,
+                                   const std::string &prefix) {
     cv::Mat outimg;
-    std::string title =
-            std::to_string(left_id) + " match " + std::to_string(right_id);
+    std::string title = prefix + " " + std::to_string(left_id) + " match " +
+                        std::to_string(right_id);
     cv::drawMatches(img1, kpts1, img2, kpts2, matches, outimg);
     cv::imshow(title, outimg);
     cv::waitKey(0);
@@ -55,6 +56,7 @@ int Frontend::match_with_keyframe(int match_cnt) {
 }
 
 void Frontend::get_image(const cv::Mat &image, double t) {
+    reset();
     m_curframe_info.clear();
     m_curframe_info.image = image;
     m_curframe_info.time = t;
@@ -85,7 +87,8 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     } else if (m_state == State::Tracking) {
         if (tracking(image, t)) {
             std::unique_lock<std::mutex> lock(m_map->map_global_mutex);
-            m_map->insert_frame(m_curframe_info, m_matches, m_matches_inlier);
+            m_map->insert_frame(m_curframe_info, m_matches, m_matches_inlier,
+                                mb_new_key_frame);
             m_map->update_keyframe_info(m_keyframe_info);
             b_succ = true;
         }
@@ -186,7 +189,6 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     int cnt_keyframe_match = track_with_match();
     int cnt_proj_match = 0;
     if (cnt_keyframe_match < CNT_MIN_MATCHES) {
-        // show_matches(m_keyframe, m_cur_frame, m_matches);
         m_matcher->space_hash();
         cnt_proj_match = track_with_local_points();
     } else {
@@ -196,8 +198,14 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
         b_track_good = true;
     }
 
+    if (!b_keyframe_good && b_track_good) {
+    }
+
     log_debug_line("Track good: " << b_track_good);
     log_debug_line("Keyframe good: " << b_keyframe_good);
+    log_debug_line("Match " << cnt_keyframe_match << ". Project "
+                            << cnt_proj_match << ". Set "
+                            << m_curframe_info.cnt_pt_set << " map points.");
     log_debug_line(m_curframe_info.frame_id << ":\n"
                                             << m_curframe_info.Rcw << std::endl
                                             << m_curframe_info.tcw
@@ -240,6 +248,12 @@ int Frontend::track_with_match() {
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
         if (inliers[i]) {
             cnt_inlier += 1;
+            vo_id_t map_pt_id =
+                    m_keyframe_info.get_point_id(old_match[i].queryIdx);
+            cv::Mat map_pt_coord =
+                    m_keyframe_info.get_point_coord(old_match[i].queryIdx);
+            m_curframe_info.set_point(old_match[i].trainIdx, map_pt_id,
+                                      map_pt_coord);
         } else {
             m_matches_inlier[origin_index[i]] = false;
         }
@@ -274,18 +288,10 @@ int Frontend::track_with_local_points() {
     TIME_IT(proj_matches = m_matcher->match_by_projection(local_map_pts, 5.0f),
             "projection match cost ");
 
-    std::vector<cv::DMatch> dmatches;
     for (auto &proj_match : proj_matches) {
         map_pt_coords.push_back(proj_match.coord3d);
         img_pts.push_back(proj_match.img_pt);
-        for (int i = 0; i < int(m_keyframe_info.kpts.size()); ++i) {
-            if (m_keyframe_info.is_index_set(i) &&
-                m_keyframe_info.map_pt_id[i] == proj_match.p_map_pt->get_id()) {
-                dmatches.emplace_back(i, proj_match.index, 1.0f);
-            }
-        }
     }
-    // show_matches(m_keyframe, m_cur_frame, dmatches);
     if (map_pt_coords.size() < CNT_MIN_MATCHES) {
         return int(map_pt_coords.size());
     }
@@ -294,9 +300,11 @@ int Frontend::track_with_local_points() {
                        is_inliers, PNP_RANSAC::VO_NONO_PNP_RANSAC),
             "projection pnp cost ");
 
+    assert(proj_matches.size() == is_inliers.size());
     for (int i = 0; i < int(is_inliers.size()); ++i) {
         if (is_inliers[i]) { cnt_proj_match += 1; }
     }
+
     if (cnt_proj_match < CNT_MIN_MATCHES) { return cnt_proj_match; }
     for (int i = 0; i < int(is_inliers.size()); ++i) {
         if (is_inliers[i]) {
@@ -314,6 +322,13 @@ int Frontend::track_with_local_points() {
                    << is_inliers.size() << " projection with " << cnt_proj_match
                    << " map points.");
     return cnt_proj_match;
+}
+
+void Frontend::show_keyframe_curframe_match(
+        const std::vector<cv::DMatch> &matches, const std::string &prefix) const {
+    show_matches(m_keyframe_info.frame_id, m_curframe_info.frame_id,
+                 m_keyframe_info.image, m_curframe_info.image,
+                 m_keyframe_info.kpts, m_curframe_info.kpts, matches, prefix);
 }
 
 }// namespace vo_nono

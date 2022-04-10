@@ -39,7 +39,8 @@ public:
         : m_config(config),
           m_camera(camera),
           m_state(State::Start),
-          m_map(std::move(p_map)) {
+          m_map(std::move(p_map)),
+          mb_new_key_frame(false) {
         log_debug_line("Frontend camera intrinsic matrix:\n"
                        << m_camera.get_intrinsic_mat());
     }
@@ -57,6 +58,10 @@ private:
     static constexpr int CNT_MATCHES = 200;
     static constexpr int CNT_MIN_MATCHES = 20;
 
+    void reset() { mb_new_key_frame = false; }
+    void show_keyframe_curframe_match(const std::vector<cv::DMatch> &matches,
+                                      const std::string &prefix) const;
+
     FrontendConfig m_config;
     const Camera &m_camera;
     State m_state;
@@ -68,8 +73,10 @@ private:
     std::vector<bool> m_matches_inlier;
 
     vo_ptr<Map> m_map;
+    int m_last_keyframe{};
 
     MotionPredictor m_motion_pred;
+    bool mb_new_key_frame;
 };
 }// namespace vo_nono
 
