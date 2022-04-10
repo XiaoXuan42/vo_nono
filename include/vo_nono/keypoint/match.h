@@ -80,7 +80,7 @@ public:
 private:
     constexpr static int WIDTH_TOTAL_GRID = 64;
     constexpr static int HEIGHT_TOTAL_GRID = 48;
-    constexpr static int MAX_DESC_DIS = 100;
+    constexpr static int MAX_DESC_DIS = 40;
 
     struct KeyPointGrid {
         std::vector<int> grid[HEIGHT_TOTAL_GRID][WIDTH_TOTAL_GRID];

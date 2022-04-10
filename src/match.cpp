@@ -15,6 +15,7 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
     std::vector<double> distances;
     std::unordered_map<int, int> book;
 
+    int proj_exceed = 0, in_image = 0, no_near = 0, collide = 0;
     cv::Mat proj_mat = get_proj_mat(m_camera_intrinsic, m_Rcw, m_tcw);
     for (auto &map_pt : map_points) {
         cv::Point2f proj_img_pt = hm2d_to_euclid2d(
@@ -22,15 +23,16 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
         auto coord = cv::Matx31f(map_pt->get_coord());
         if (proj_img_pt.x >= 0 && proj_img_pt.x < m_total_width &&
             proj_img_pt.y >= 0 && proj_img_pt.y < m_total_height) {
+            in_image += 1;
 
             int min_width_id =
                     get_grid_width_id(std::max(0.0f, proj_img_pt.x - dist_th));
             int max_width_id = get_grid_width_id(
                     std::min(m_total_width, proj_img_pt.x + dist_th));
             int min_height_id =
-                    get_grid_height_id(std::min(0.0f, proj_img_pt.y - dist_th));
+                    get_grid_height_id(std::max(0.0f, proj_img_pt.y - dist_th));
             int max_height_id = get_grid_height_id(
-                    std::max(m_total_height, proj_img_pt.y + dist_th));
+                    std::min(m_total_height, proj_img_pt.y + dist_th));
 
             int best_id = -1;
             int best_dis = std::numeric_limits<int>::max();
@@ -54,11 +56,20 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
                 }
             }
 
-            if (best_id < 0) { continue; }
-            if (best_dis > MAX_DESC_DIS) { continue; }
+            if (best_id < 0) {
+                no_near += 1;
+                continue;
+            }
+            if (best_dis > MAX_DESC_DIS) {
+                proj_exceed += 1;
+                continue;
+            }
             if (book.count(best_id)) {
                 assert(book[best_id] < int(distances.size()));
-                if (distances[book[best_id]] < best_dis) { continue; }
+                if (distances[book[best_id]] < best_dis) {
+                    collide += 1;
+                    continue;
+                }
             }
 
             book[best_id] = int(distances.size());
@@ -69,6 +80,11 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
         }
     }
 
+    log_debug_line(in_image << " projected inside image with " << proj_exceed
+                            << " points distance too far, " << no_near
+                            << " points no near point, " << collide
+                            << " collided.");
+
     std::vector<ProjMatch> proj_matches;
     for (auto pair : book) {
         int frame_index = pair.first;
@@ -78,6 +94,7 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
                                             img_pts[cur_index],
                                             map_pts[cur_index]));
     }
+    log_debug_line("Total projected " << proj_matches.size() << " points.");
     return proj_matches;
 }
 
