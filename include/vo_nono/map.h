@@ -83,6 +83,7 @@ struct FrameInfo {
         map_pt_id = std::vector<vo_id_t>(kpts.size(), vo_id_invalid);
         map_coord = std::vector<cv::Mat>(kpts.size());
         cnt_pt_set = 0;
+        image = pframe->image;
         for (int i = 0; i < int(kpts.size()); ++i) {
             if (pframe->is_index_set(i)) {
                 map_pt_id[i] = pframe->get_map_pt(i)->get_id();
@@ -145,9 +146,7 @@ public:
             mb_shutdown = true;
             m_global_ba_cv.notify_all();
         }
-        if (mt_global_ba.joinable()) {
-            mt_global_ba.join();
-        }
+        if (mt_global_ba.joinable()) { mt_global_ba.join(); }
     }
 
     void initialize(FrameInfo &keyframe_info, FrameInfo &ref_frame_info,
@@ -164,6 +163,8 @@ public:
                 std::move(ref_frame_info.descriptors),
                 std::move(ref_frame_info.kpts), ref_frame_info.time,
                 ref_frame_info.Rcw.clone(), ref_frame_info.tcw.clone()));
+        p_keyframe->image = keyframe_info.image;
+        p_refframe->image = ref_frame_info.image;
 
         for (size_t i = 0; i < matches.size(); ++i) {
             if (triangulate_inlier[i]) {
@@ -189,6 +190,7 @@ public:
                 frame_info.descriptors, std::move(frame_info.kpts),
                 frame_info.time, frame_info.Rcw.clone(),
                 frame_info.tcw.clone()));
+        p_frame->image = frame_info.image;
         for (int i = 0; i < int(frame_info.map_pt_id.size()); ++i) {
             if (frame_info.is_index_set(i)) {
                 assert(m_id_to_map_pt.count(frame_info.map_pt_id[i]));

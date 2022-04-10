@@ -16,6 +16,8 @@
 namespace vo_nono {
 class Frame {
 public:
+    cv::Mat image;
+
     static Frame create_frame(cv::Mat descriptor,
                               std::vector<cv::KeyPoint> kpts, double time,
                               cv::Mat Rcw = cv::Mat::eye(3, 3, CV_32F),

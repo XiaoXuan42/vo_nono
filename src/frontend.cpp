@@ -208,7 +208,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
 
     if (!b_keyframe_good && b_track_good) {
         if (double(cnt_keyframe_match) < 0.2 * m_keyframe_info.cnt_pt_set) {
-            //mb_new_key_frame = true;
+            mb_new_key_frame = true;
         }
     }
 
@@ -302,7 +302,7 @@ int Frontend::track_with_local_points() {
             tcw = m_curframe_info.tcw.clone();
     m_matcher->set_estimate_pose(Rcw, tcw);
 
-    TIME_IT(proj_matches = m_matcher->match_by_projection(local_map_pts, 30.0f),
+    TIME_IT(proj_matches = m_matcher->match_by_projection(local_map_pts, 5.0f),
             "projection match cost ");
 
     std::vector<cv::DMatch> dmatches;
