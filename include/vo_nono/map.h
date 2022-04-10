@@ -108,7 +108,7 @@ public:
 
     void global_bundle_adjustment();
 
-    [[nodiscard]] Trajectory get_trajectory() const {
+    [[nodiscard]] Trajectory get_trajectory() {
         Trajectory trajectory;
         trajectory.reserve(m_frames.size());
         for (const vo_ptr<Frame> &frame : m_frames) {
@@ -145,7 +145,9 @@ public:
             mb_shutdown = true;
             m_global_ba_cv.notify_all();
         }
-        //mt_global_ba.join();
+        if (mt_global_ba.joinable()) {
+            mt_global_ba.join();
+        }
     }
 
     void initialize(FrameInfo &keyframe_info, FrameInfo &ref_frame_info,
@@ -230,6 +232,7 @@ public:
     std::mutex map_global_mutex;
 
 private:
+    void _global_bundle_adjustment(std::unique_lock<std::mutex> &lock);
     vo_ptr<MapPoint> create_new_map_pt(const cv::Mat &coord,
                                        const cv::Mat &descriptor) {
         auto res = std::make_shared<MapPoint>(
