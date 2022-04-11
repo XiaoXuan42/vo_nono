@@ -25,7 +25,7 @@ struct ProjMatch {
 
 class ORBMatcher {
 public:
-    ORBMatcher(const std::vector<cv::KeyPoint> &kpts, cv::Mat descriptors,
+    ORBMatcher(std::vector<cv::KeyPoint> kpts, cv::Mat descriptors,
                const Camera &camera)
         : m_total_width(camera.get_width()),
           m_total_height(camera.get_height()),
@@ -36,7 +36,7 @@ public:
                   std::ceil((camera.get_height() + HEIGHT_TOTAL_GRID - 1.0f) /
                             HEIGHT_TOTAL_GRID)),
           m_camera_intrinsic(camera.get_intrinsic_mat()),
-          kpts(kpts),
+          kpts(std::move(kpts)),
           descriptors(std::move(descriptors)),
           mb_space_hash(false) {}
 
@@ -114,7 +114,7 @@ private:
     std::vector<KeyPointGrid> m_pyramid_grids;
     cv::Mat m_camera_intrinsic, m_Rcw, m_tcw;
 
-    const std::vector<cv::KeyPoint> &kpts;
+    const std::vector<cv::KeyPoint> kpts;
     const cv::Mat descriptors;
     bool mb_space_hash;
 };

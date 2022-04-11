@@ -24,7 +24,7 @@ void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
     for (auto &frame : m_keyframes) {
         assert(frame_to_index.count(frame) == 0);
         int cur_cam_index = graph.add_cam_pose(frame->get_pose());
-        for (int i = 0; i < int(frame->get_cnt_kpt()); ++i) {
+        for (int i = 0; i < int(frame->kpts.size()); ++i) {
             if (frame->is_index_set(i)) {
                 auto pt = frame->get_map_pt(i);
                 int cur_pt_index = -1;
@@ -34,8 +34,7 @@ void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
                 } else {
                     cur_pt_index = point_to_index[pt];
                 }
-                graph.add_edge(cur_cam_index, cur_pt_index,
-                               frame->get_kpt_by_index(i).pt);
+                graph.add_edge(cur_cam_index, cur_pt_index, frame->kpts[i].pt);
             }
         }
     }

@@ -49,8 +49,9 @@ private:
     int match_with_keyframe(int match_cnt);
     int initialize(const cv::Mat &image, double t);
     bool tracking(const cv::Mat &image, double t);
-    int track_with_match();
-    int track_with_local_points();
+    int track_by_match_with_keyframe();
+    int track_by_local_points();
+    int triangulate_with_keyframe();
 
 private:
     static constexpr int CNT_INIT_MATCHES = 500;
@@ -66,14 +67,13 @@ private:
     const Camera &m_camera;
     State m_state;
 
-    FrameInfo m_keyframe_info;
-    FrameInfo m_curframe_info;
+    vo_ptr<Frame> m_keyframe;
+    vo_ptr<Frame> m_curframe;
     vo_uptr<ORBMatcher> m_matcher;
     std::vector<cv::DMatch> m_matches;
     std::vector<bool> m_matches_inlier;
 
     vo_ptr<Map> m_map;
-    int m_last_keyframe{};
 
     MotionPredictor m_motion_pred;
     bool mb_new_key_frame;
