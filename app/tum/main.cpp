@@ -1,6 +1,5 @@
 #include <fstream>
 #include <iostream>
-#include <string>
 #include <iomanip>
 
 #include "tum.h"
@@ -35,6 +34,11 @@ int main(int argc, const char *argv[]) {
         double cur_time = database.cur_time();
         cv::Mat img = database.cur_image_gray();
         database.next();
+        frame_id += 1;
+/*        if (frame_id <= 170) {
+            continue;
+        }*/
+
         std::chrono::steady_clock::time_point t1 =
                 std::chrono::steady_clock::now();
         system.get_image(img, cur_time);
@@ -50,8 +54,7 @@ int main(int argc, const char *argv[]) {
         std::cout << "---------------------------------------------------------"
                      "----"
                   << std::endl;
-        if (frame_id >= 200) { break; }
-        frame_id += 1;
+        if (frame_id >= 300) { break; }
     }
 
     if (argc >= 4) {

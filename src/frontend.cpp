@@ -45,7 +45,8 @@ void Frontend::detect_and_compute(const cv::Mat &image,
 int Frontend::match_with_keyframe(int match_cnt) {
     m_matches = m_matcher->match_descriptor_bf(m_keyframe->descriptor, 8, 30,
                                                match_cnt);
-    log_debug_line("Original match: " << m_matches.size());
+    log_debug_line("Original match: " << m_matches.size()
+                                      << ". Keyframe: " << m_keyframe->id);
     std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
     match_kpt1.reserve(m_matches.size());
     match_kpt2.reserve(m_matches.size());
@@ -123,7 +124,7 @@ int Frontend::initialize(const cv::Mat &image) {
     cv::Mat Ess;
     TIME_IT(Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
                                        m_camera.get_intrinsic_mat(), cv::RANSAC,
-                                       0.999, 0.5, mask),
+                                       0.999, 1.0, 1000, mask),
             "Find essential mat cost ");
     // filter outliers
     m_matches = filter_by_mask(m_matches, mask);
@@ -136,7 +137,8 @@ int Frontend::initialize(const cv::Mat &image) {
     }
 
     cv::Mat Rcw, tcw;
-    cv::recoverPose(Ess, matched_pt1, matched_pt2, Rcw, tcw);
+    cv::recoverPose(Ess, matched_pt1, matched_pt2, m_camera.get_intrinsic_mat(),
+                    Rcw, tcw);
     Rcw.convertTo(Rcw, CV_32F);
     tcw.convertTo(tcw, CV_32F);
     m_curframe->set_Rcw(Rcw);
@@ -147,7 +149,7 @@ int Frontend::initialize(const cv::Mat &image) {
     std::vector<bool> inliers;
     int cnt_new_pt = Triangulator::triangulate_and_filter_frames(
             m_keyframe.get(), m_curframe.get(), m_camera.get_intrinsic_mat(),
-            m_matches, triangulate_result, inliers, 10000);
+            m_matches, triangulate_result, inliers, 1000);
     if (cnt_new_pt < 40) { return -2; }
 
     double scale = 3;
@@ -187,6 +189,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     m_motion_pred.predict_pose(t, motion_Rcw, motion_Tcw);
     m_curframe->set_Rcw(motion_Rcw);
     m_curframe->set_Tcw(motion_Tcw);
+    log_debug_line("Motion predict:\n" << motion_Rcw << std::endl << motion_Tcw << std::endl);
 
     std::vector<bool> tri_inliers_keyframe;
     match_with_keyframe(CNT_MATCHES);
@@ -205,14 +208,14 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
         b_track_good = true;
     }
 
-    if (b_track_good) { triangulate_with_keyframe(); }
-
     if (!b_keyframe_good && b_track_good) {
         if (double(cnt_keyframe_match) <
             0.2 * double(m_keyframe->get_cnt_map_pt())) {
             mb_new_key_frame = true;
         }
     }
+
+    if (b_track_good) { triangulate_with_keyframe(); }
 
     log_debug_line("Track good: " << b_track_good);
     log_debug_line("Keyframe good: " << b_keyframe_good);
@@ -252,7 +255,7 @@ int Frontend::track_by_match_with_keyframe() {
     std::vector<cv::Matx31f> inlier_coords;
     std::vector<cv::Point2f> inlier_img_pts;
     cv::Mat Rcw = m_curframe->get_Rcw(), tcw = m_curframe->get_Tcw();
-    pnp_ransac(pt_coords, img_pts, m_camera, 100, 2, Rcw, tcw, inliers,
+    pnp_ransac(pt_coords, img_pts, m_camera, 100, 6, Rcw, tcw, inliers,
                PNP_RANSAC::VO_NONO_PNP_RANSAC);
     assert(inliers.size() == pt_coords.size());
     assert(old_match.size() == pt_coords.size());
@@ -270,7 +273,7 @@ int Frontend::track_by_match_with_keyframe() {
     }
     log_debug_line(cnt_inlier << " inliers after pnp ransac");
 
-    if (cnt_inlier < CNT_MIN_MATCHES / 2) { return int(cnt_inlier); }
+    if (cnt_inlier < CNT_MIN_MATCHES) { return int(cnt_inlier); }
 
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
         if (inliers[i]) {
@@ -365,22 +368,27 @@ int Frontend::track_by_local_points() {
 int Frontend::triangulate_with_keyframe() {
     std::vector<bool> tri_inliers;
     std::vector<cv::Mat> tri_results;
-    int cnt_succ = Triangulator::triangulate_and_filter_frames(
+    Triangulator::triangulate_and_filter_frames(
             m_keyframe.get(), m_curframe.get(), m_camera.get_intrinsic_mat(),
-            m_matches, tri_results, tri_inliers, 10000);
+            m_matches, tri_results, tri_inliers, 1000);
 
+    int cnt_succ = 0;
     for (int i = 0; i < int(tri_inliers.size()); ++i) {
         if (tri_inliers[i]) {
-            if (!m_keyframe->is_index_set(m_matches[i].queryIdx) &&
-                !m_curframe->is_index_set(m_matches[i].trainIdx)) {
-                cnt_succ -= 1;
-                auto new_pt =
-                        std::make_shared<MapPoint>(MapPoint::create_map_point(
-                                tri_results[i],
-                                m_keyframe->descriptor.row(
-                                        m_matches[i].queryIdx)));
-                m_keyframe->set_map_pt(m_matches[i].queryIdx, new_pt);
-                m_curframe->set_map_pt(m_matches[i].trainIdx, new_pt);
+            if (!m_curframe->is_index_set(m_matches[i].trainIdx)) {
+                vo_ptr<MapPoint> target_pt;
+                if (m_keyframe->is_index_set(m_matches[i].queryIdx)) {
+                    target_pt = m_keyframe->get_map_pt(m_matches[i].queryIdx);
+                } else {
+                    target_pt = std::make_shared<MapPoint>(
+                            MapPoint::create_map_point(
+                                    tri_results[i],
+                                    m_keyframe->descriptor.row(
+                                            m_matches[i].queryIdx)));
+                    m_keyframe->set_map_pt(m_matches[i].queryIdx, target_pt);
+                    cnt_succ += 1;
+                }
+                m_curframe->set_map_pt(m_matches[i].trainIdx, target_pt);
             }
         }
     }

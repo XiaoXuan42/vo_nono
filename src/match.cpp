@@ -80,6 +80,7 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
         }
     }
 
+    log_debug_line("Estimate:\n" << m_Rcw << std::endl << m_tcw << std::endl);
     log_debug_line(in_image << " projected inside image with " << proj_exceed
                             << " points distance too far, " << no_near
                             << " points no near point, " << collide

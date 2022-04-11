@@ -46,7 +46,7 @@ inline void _pnp_ransac_select(const std::vector<cv::Point2f>& img_pts,
 
 void _vo_nono_pnp_ransac(const std::vector<cv::Matx31f>& coords,
                          const std::vector<cv::Point2f>& img_pts,
-                         const Camera& camera, int iter_cnt, float proj_th2,
+                         const Camera& camera, int iter_cnt, float proj_th,
                          cv::Mat& Rcw, cv::Mat& tcw,
                          std::vector<bool>& is_inlier) {
     assert(img_pts.size() > 4);
@@ -77,8 +77,8 @@ void _vo_nono_pnp_ransac(const std::vector<cv::Matx31f>& coords,
         std::vector<bool> cur_is_inlier(img_pts.size(), false);
         for (int i = 0; i < (int) img_pts.size(); ++i) {
             cv::Point2f diff_pt = img_pts[i] - res_img_pts[i];
-            float diff_square = diff_pt.x * diff_pt.x + diff_pt.y * diff_pt.y;
-            if (diff_square < proj_th2) {
+            if (std::fabs(diff_pt.x) < proj_th &&
+                std::fabs(diff_pt.y) < proj_th) {
                 cnt_inlier += 1;
                 cur_is_inlier[i] = true;
             }
@@ -127,15 +127,15 @@ void _cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
 
 void pnp_ransac(const std::vector<cv::Matx31f>& coords,
                 const std::vector<cv::Point2f>& img_pts, const Camera& camera,
-                int iter_cnt, float proj_th2, cv::Mat& Rcw, cv::Mat& tcw,
+                int iter_cnt, float proj_th, cv::Mat& Rcw, cv::Mat& tcw,
                 std::vector<bool>& is_inlier, PNP_RANSAC method) {
     switch (method) {
         case CV_PNP_RANSAC:
-            _cv_pnp_ransac(coords, img_pts, camera, iter_cnt, proj_th2, Rcw, tcw,
+            _cv_pnp_ransac(coords, img_pts, camera, iter_cnt, proj_th, Rcw, tcw,
                            is_inlier);
             break;
         case VO_NONO_PNP_RANSAC:
-            _vo_nono_pnp_ransac(coords, img_pts, camera, iter_cnt, proj_th2, Rcw,
+            _vo_nono_pnp_ransac(coords, img_pts, camera, iter_cnt, proj_th, Rcw,
                                 tcw, is_inlier);
             break;
         default:
