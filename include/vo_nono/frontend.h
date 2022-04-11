@@ -47,7 +47,7 @@ public:
 
 private:
     int match_with_keyframe(int match_cnt);
-    int initialize(const cv::Mat &image, double t);
+    int initialize(const cv::Mat &image);
     bool tracking(const cv::Mat &image, double t);
     int track_by_match_with_keyframe();
     int track_by_local_points();
@@ -59,7 +59,6 @@ private:
     static constexpr int CNT_MATCHES = 200;
     static constexpr int CNT_MIN_MATCHES = 20;
 
-    void reset() { mb_new_key_frame = false; }
     void show_keyframe_curframe_match(const std::vector<cv::DMatch> &matches,
                                       const std::string &prefix) const;
 

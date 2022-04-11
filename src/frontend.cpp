@@ -62,7 +62,6 @@ int Frontend::match_with_keyframe(int match_cnt) {
 }
 
 void Frontend::get_image(const cv::Mat &image, double t) {
-    reset();
     std::vector<cv::KeyPoint> kpts;
     cv::Mat descriptor;
     detect_and_compute(image, kpts, descriptor, CNT_KEY_PTS);
@@ -79,7 +78,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         m_keyframe = m_curframe;
         b_succ = true;
     } else if (m_state == State::Initializing) {
-        int init_state = initialize(image, t);
+        int init_state = initialize(image);
         if (init_state == 0) {
             m_state = State::Tracking;
             m_map->insert_frame(m_keyframe);
@@ -87,11 +86,8 @@ void Frontend::get_image(const cv::Mat &image, double t) {
             m_map->insert_key_frame(m_keyframe);
             b_succ = true;
         } else if (init_state == -1) {
-            b_succ = false;
-        } else if (init_state == -2) {
-            b_succ = false;
-        } else {
-            unimplemented();
+            // not enough matches
+            m_keyframe = m_curframe;
         }
     } else if (m_state == State::Tracking) {
         if (tracking(image, t)) {
@@ -99,6 +95,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
             if (mb_new_key_frame) {
                 m_map->insert_key_frame(m_curframe);
                 m_keyframe = m_curframe;
+                mb_new_key_frame = false;
             }
             b_succ = false;
         }
@@ -112,18 +109,16 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     }
 }
 
-int Frontend::initialize(const cv::Mat &image, double t) {
+int Frontend::initialize(const cv::Mat &image) {
     m_matches = m_matcher->match_descriptor_bf(m_keyframe->descriptor, 8, 15,
                                                CNT_INIT_MATCHES);
 
+    if (m_matches.size() < 10) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
     for (auto &match : m_matches) {
         matched_pt1.push_back(m_keyframe->kpts[match.queryIdx].pt);
         matched_pt2.push_back(m_curframe->kpts[match.trainIdx].pt);
     }
-
-    // todo: less than 8 matched points?
-    // todo: findEssentialMat hyper parameters
     std::vector<unsigned char> mask;
     cv::Mat Ess;
     TIME_IT(Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
@@ -257,7 +252,7 @@ int Frontend::track_by_match_with_keyframe() {
     std::vector<cv::Matx31f> inlier_coords;
     std::vector<cv::Point2f> inlier_img_pts;
     cv::Mat Rcw = m_curframe->get_Rcw(), tcw = m_curframe->get_Tcw();
-    pnp_ransac(pt_coords, img_pts, m_camera, 100, 10, Rcw, tcw, inliers,
+    pnp_ransac(pt_coords, img_pts, m_camera, 100, 2, Rcw, tcw, inliers,
                PNP_RANSAC::VO_NONO_PNP_RANSAC);
     assert(inliers.size() == pt_coords.size());
     assert(old_match.size() == pt_coords.size());
@@ -274,9 +269,6 @@ int Frontend::track_by_match_with_keyframe() {
         }
     }
     log_debug_line(cnt_inlier << " inliers after pnp ransac");
-    if (m_curframe->id >= 180) {
-        //show_keyframe_curframe_match(dmatches, "Filtered match ");
-    }
 
     if (cnt_inlier < CNT_MIN_MATCHES / 2) { return int(cnt_inlier); }
 
@@ -324,7 +316,7 @@ int Frontend::track_by_local_points() {
         return int(map_pt_coords.size());
     }
 
-    TIME_IT(pnp_ransac(map_pt_coords, img_pts, m_camera, 100, 10, Rcw, tcw,
+    TIME_IT(pnp_ransac(map_pt_coords, img_pts, m_camera, 100, 2, Rcw, tcw,
                        is_inliers, PNP_RANSAC::VO_NONO_PNP_RANSAC),
             "projection pnp cost ");
 
@@ -392,6 +384,7 @@ int Frontend::triangulate_with_keyframe() {
             }
         }
     }
+    log_debug_line("Triangulated " << cnt_succ << " points.");
     return cnt_succ;
 }
 
