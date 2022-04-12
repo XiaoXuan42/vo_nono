@@ -98,7 +98,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
                 m_keyframe = m_curframe;
                 mb_new_key_frame = false;
             }
-            b_succ = false;
+            b_succ = true;
         }
     } else {
         unimplemented();
@@ -189,7 +189,6 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     m_motion_pred.predict_pose(t, motion_Rcw, motion_Tcw);
     m_curframe->set_Rcw(motion_Rcw);
     m_curframe->set_Tcw(motion_Tcw);
-    log_debug_line("Motion predict:\n" << motion_Rcw << std::endl << motion_Tcw << std::endl);
 
     std::vector<bool> tri_inliers_keyframe;
     match_with_keyframe(CNT_MATCHES);
