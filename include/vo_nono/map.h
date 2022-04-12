@@ -70,12 +70,10 @@ public:
         if (mt_global_ba.joinable()) { mt_global_ba.join(); }
     }
 
-    void insert_frame(const vo_ptr<Frame> &frame) {
-        m_frames.push_back(frame);
-    }
+    void insert_frame(const vo_ptr<Frame> &frame) { m_frames.push_back(frame); }
 
     void insert_key_frame(const vo_ptr<Frame> &frame) {
-        log_debug_line("Switch keyframe: " << frame->time);
+        log_debug_line("Switch keyframe: " << frame->id);
         m_keyframes.push_back(frame);
         mb_global_ba = true;
         m_global_ba_cv.notify_all();

@@ -299,7 +299,7 @@ int Frontend::track_by_local_points() {
     cv::Mat Rcw = m_curframe->get_Rcw(), tcw = m_curframe->get_Tcw();
     m_matcher->set_estimate_pose(Rcw, tcw);
 
-    TIME_IT(proj_matches = m_matcher->match_by_projection(local_map_pts, 5.0f),
+    TIME_IT(proj_matches = m_matcher->match_by_projection(local_map_pts, 10.0f),
             "projection match cost ");
 
     std::vector<cv::DMatch> dmatches;
