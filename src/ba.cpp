@@ -1,4 +1,4 @@
-#include "vo_nono/optim.h"
+#include "vo_nono/ba.h"
 
 #include <g2o/core/block_solver.h>
 #include <g2o/core/optimization_algorithm_levenberg.h>
@@ -55,7 +55,7 @@ cv::Mat to_cvmat(const Eigen::Vector3d &vec) {
     return res;
 }
 }// namespace
-void Optimizer::bundle_adjustment(OptimizeGraph &graph, int iter_cnt) {
+void Optimizer::bundle_adjustment(BundleAdjust &graph, int iter_cnt) {
     g2o::SparseOptimizer optimizer;
     optimizer.setVerbose(false);
     std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linear_solver;

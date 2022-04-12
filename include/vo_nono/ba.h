@@ -1,5 +1,5 @@
-#ifndef VO_NONO_OPTIM_H
-#define VO_NONO_OPTIM_H
+#ifndef VO_NONO_BA_H
+#define VO_NONO_BA_H
 
 #include <opencv2/core.hpp>
 #include <vector>
@@ -8,9 +8,9 @@
 #include "vo_nono/types.h"
 
 namespace vo_nono {
-class OptimizeGraph {
+class BundleAdjust {
 public:
-    explicit OptimizeGraph(const Camera &o_camera)
+    explicit BundleAdjust(const Camera &o_camera)
         : fx(o_camera.fx()),
           fy(o_camera.fy()),
           cx(o_camera.cx()),
@@ -65,8 +65,8 @@ public:
 };
 class Optimizer {
 public:
-    static void bundle_adjustment(OptimizeGraph &graph, int iter_cnt);
+    static void bundle_adjustment(BundleAdjust &graph, int iter_cnt);
 };
 }// namespace vo_nono
 
-#endif//VO_NONO_OPTIM_H
+#endif//VO_NONO_BA_H

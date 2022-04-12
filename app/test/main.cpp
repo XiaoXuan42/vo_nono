@@ -6,9 +6,9 @@
 #include <opencv2/core.hpp>
 #include <random>
 
+#include "vo_nono/ba.h"
 #include "vo_nono/camera.h"
 #include "vo_nono/motion.h"
-#include "vo_nono/optim.h"
 #include "vo_nono/util.h"
 
 cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
@@ -173,7 +173,7 @@ void test_bundle_adjustment() {
                 cv::Point2f(proj2.at<float>(0), proj2.at<float>(1)));
     }
 
-    OptimizeGraph graph(camera);
+    BundleAdjust graph(camera);
     std::random_device rd_device;
     std::mt19937 gen(rd_device());
     std::uniform_real_distribution<> dis(-1.0, 1.0);

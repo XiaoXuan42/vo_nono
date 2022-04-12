@@ -1,6 +1,6 @@
 #include "vo_nono/map.h"
 
-#include "vo_nono/optim.h"
+#include "vo_nono/ba.h"
 
 namespace vo_nono {
 void Map::global_bundle_adjustment() {
@@ -19,7 +19,7 @@ void Map::global_bundle_adjustment() {
 void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
     std::unordered_map<vo_ptr<Frame>, int> frame_to_index;
     std::unordered_map<vo_ptr<MapPoint>, int> point_to_index;
-    OptimizeGraph graph(mr_camera);
+    BundleAdjust graph(mr_camera);
 
     for (auto &frame : m_keyframes) {
         assert(frame_to_index.count(frame) == 0);
