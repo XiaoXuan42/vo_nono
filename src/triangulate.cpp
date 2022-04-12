@@ -2,7 +2,7 @@
 
 #include <opencv2/calib3d.hpp>
 
-#include "vo_nono/geometry.h"
+#include "vo_nono/keypoint/geometry.h"
 #include "vo_nono/util.h"
 
 namespace vo_nono {
@@ -10,6 +10,8 @@ void Triangulator::triangulate(const cv::Mat& proj1, const cv::Mat& proj2,
                                const std::vector<cv::Point2f>& img_pt1,
                                const std::vector<cv::Point2f>& img_pt2,
                                std::vector<cv::Mat>& result) {
+    assert(img_pt1.size() == img_pt2.size());
+    if (img_pt1.empty()) { return; }
     cv::Mat tri_res;
     cv::triangulatePoints(proj1, proj2, img_pt1, img_pt2, tri_res);
     result.reserve(tri_res.cols);

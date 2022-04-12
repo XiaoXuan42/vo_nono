@@ -24,7 +24,7 @@ public:
         m_dist_coeff = std::move(new_dist_coeff);
     }
 
-    [[nodiscard]] const cv::Mat& get_intrinsic_mat() const { return m_mat; }
+    [[nodiscard]] cv::Mat get_intrinsic_mat() const { return m_mat.clone(); }
     [[nodiscard]] const std::vector<float>& get_dist_coeff() const {
         return m_dist_coeff;
     }

@@ -46,10 +46,16 @@ public:
             const cv::Mat &o_descpt, float soft_dis_th, float hard_dis_th,
             int expect_cnt) const;
 
-    static void filter_match_rotation_consistency(
+    static void filter_match_by_rotation_consistency(
             const std::vector<cv::KeyPoint> &kpts1,
             const std::vector<cv::KeyPoint> &kpts2,
             std::vector<unsigned char> &mask, const int topK);
+
+    static void filter_match_by_ess(const cv::Mat &Ess,
+                                    const cv::Mat &camera_intrinsic,
+                                    const std::vector<cv::Point2f> &pts1,
+                                    const std::vector<cv::Point2f> &pts2,
+                                    double th, std::vector<bool> &mask);
 
     void set_estimate_pose(const cv::Mat &Rcw, const cv::Mat &tcw) {
         assert(Rcw.type() == CV_32F);

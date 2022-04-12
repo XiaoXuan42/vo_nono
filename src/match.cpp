@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#include "vo_nono/geometry.h"
+#include "vo_nono/keypoint/geometry.h"
 #include "vo_nono/util.h"
 
 namespace vo_nono {
@@ -143,7 +143,7 @@ std::vector<cv::DMatch> ORBMatcher::match_descriptor_bf(const cv::Mat &o_descpt,
                                    expect_cnt);
 }
 
-void ORBMatcher::filter_match_rotation_consistency(
+void ORBMatcher::filter_match_by_rotation_consistency(
         const std::vector<cv::KeyPoint> &kpts1,
         const std::vector<cv::KeyPoint> &kpts2,
         std::vector<unsigned char> &mask, const int topK) {
@@ -165,10 +165,39 @@ void ORBMatcher::filter_match_rotation_consistency(
         pts1.push_back(kpts1[i].pt);
         pts2.push_back(kpts2[i].pt);
     }
-    mask = std::vector<unsigned char>(pts1.size(), 1);
+    mask.resize(pts1.size(), 1);
     histo.cal_topK(topK);
     for (int i = 0; i < (int) kpts1.size(); ++i) {
         if (!histo.is_topK(ang_diff[i])) { mask[i] = 0; }
+    }
+}
+
+void ORBMatcher::filter_match_by_ess(const cv::Mat &Ess,
+                                     const cv::Mat &camera_intrinsic,
+                                     const std::vector<cv::Point2f> &pts1,
+                                     const std::vector<cv::Point2f> &pts2,
+                                     double th, std::vector<bool> &mask) {
+    assert(pts1.size() == pts2.size());
+    cv::Mat inv_cam_intrinsic = camera_intrinsic.inv();
+    cv::Mat l_mat = Ess * inv_cam_intrinsic;
+    mask.resize(pts1.size(), true);
+    for (int i = 0; i < int(pts1.size()); ++i) {
+        cv::Mat mat1 = cv::Mat::zeros(3, 1, CV_32F),
+                mat2 = cv::Mat::zeros(3, 1, CV_32F);
+        mat1.at<float>(0, 0) = pts1[i].x;
+        mat1.at<float>(1, 0) = pts1[i].y;
+        mat1.at<float>(2, 0) = 1.0f;
+        mat2.at<float>(0, 0) = pts2[i].x;
+        mat2.at<float>(1, 0) = pts2[i].y;
+        mat2.at<float>(2, 0) = 1.0f;
+        cv::Mat l = l_mat * mat1;
+        cv::Mat pt2 = inv_cam_intrinsic * mat2;
+        cv::Mat mat_res = pt2.t() * l;
+        double diff = std::abs(double(mat_res.at<float>(0)));
+        double l_norm = cv::norm(l);
+        if (diff > th * l_norm) {
+            mask[i] = false;
+        }
     }
 }
 }// namespace vo_nono

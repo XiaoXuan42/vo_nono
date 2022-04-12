@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "vo_nono/keypoint/epipolar.h"
 #include "vo_nono/keypoint/triangulate.h"
 #include "vo_nono/pnp.h"
 #include "vo_nono/point.h"
@@ -45,8 +46,9 @@ void Frontend::detect_and_compute(const cv::Mat &image,
 int Frontend::match_with_keyframe(int match_cnt) {
     m_matches = m_matcher->match_descriptor_bf(m_keyframe->descriptor, 8, 30,
                                                match_cnt);
-    log_debug_line("Original match: " << m_matches.size()
-                                      << ". Keyframe: " << m_keyframe->id);
+    log_debug_line("Original match: "
+                   << m_matches.size() << ". Keyframe: " << m_keyframe->id
+                   << " " << m_keyframe->get_cnt_map_pt() << " points set.");
     std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
     match_kpt1.reserve(m_matches.size());
     match_kpt2.reserve(m_matches.size());
@@ -55,8 +57,8 @@ int Frontend::match_with_keyframe(int match_cnt) {
         match_kpt2.push_back(m_curframe->kpts[match.trainIdx]);
     }
     std::vector<unsigned char> mask;
-    m_matcher->filter_match_rotation_consistency(match_kpt1, match_kpt2, mask,
-                                                 3);
+    m_matcher->filter_match_by_rotation_consistency(match_kpt1, match_kpt2,
+                                                    mask, 3);
     m_matches = filter_by_mask(m_matches, mask);
     m_matches_inlier = std::vector(m_matches.size(), true);
     return int(m_matches.size());
@@ -365,29 +367,47 @@ int Frontend::track_by_local_points() {
 }
 
 int Frontend::triangulate_with_keyframe() {
+    std::vector<cv::DMatch> valid_match;
+    std::vector<bool> mask;
+    std::vector<cv::Point2f> pts1, pts2;
+    cv::Mat R21, t21;
+    relative_pose(m_keyframe->get_Rcw(), m_keyframe->get_Tcw(),
+                  m_curframe->get_Rcw(), m_curframe->get_Tcw(), R21, t21);
+    cv::Mat ess = Epipolar::compute_essential(R21, t21);
+    for (auto &match : m_matches) {
+        pts1.push_back(m_keyframe->kpts[match.queryIdx].pt);
+        pts2.push_back(m_curframe->kpts[match.trainIdx].pt);
+    }
+    ORBMatcher::filter_match_by_ess(ess, m_camera.get_intrinsic_mat(), pts1,
+                                    pts2, 0.01, mask);
+    valid_match = filter_by_mask(m_matches, mask);
+    log_debug_line("Before ess check: " << m_matches.size()
+                                        << " after: " << valid_match.size());
+
     std::vector<bool> tri_inliers;
     std::vector<cv::Mat> tri_results;
     Triangulator::triangulate_and_filter_frames(
             m_keyframe.get(), m_curframe.get(), m_camera.get_intrinsic_mat(),
-            m_matches, tri_results, tri_inliers, 1000);
+            valid_match, tri_results, tri_inliers, 1000);
 
+    assert(valid_match.size() == tri_inliers.size());
     int cnt_succ = 0;
     for (int i = 0; i < int(tri_inliers.size()); ++i) {
         if (tri_inliers[i]) {
-            if (!m_curframe->is_index_set(m_matches[i].trainIdx)) {
+            if (!m_curframe->is_index_set(valid_match[i].trainIdx)) {
                 vo_ptr<MapPoint> target_pt;
-                if (m_keyframe->is_index_set(m_matches[i].queryIdx)) {
-                    target_pt = m_keyframe->get_map_pt(m_matches[i].queryIdx);
+                if (m_keyframe->is_index_set(valid_match[i].queryIdx)) {
+                    target_pt = m_keyframe->get_map_pt(valid_match[i].queryIdx);
                 } else {
                     target_pt = std::make_shared<MapPoint>(
                             MapPoint::create_map_point(
                                     tri_results[i],
                                     m_keyframe->descriptor.row(
-                                            m_matches[i].queryIdx)));
-                    m_keyframe->set_map_pt(m_matches[i].queryIdx, target_pt);
+                                            valid_match[i].queryIdx)));
+                    m_keyframe->set_map_pt(valid_match[i].queryIdx, target_pt);
                     cnt_succ += 1;
                 }
-                m_curframe->set_map_pt(m_matches[i].trainIdx, target_pt);
+                m_curframe->set_map_pt(valid_match[i].trainIdx, target_pt);
             }
         }
     }

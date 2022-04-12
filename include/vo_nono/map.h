@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "vo_nono/frame.h"
-#include "vo_nono/geometry.h"
+#include "vo_nono/keypoint/geometry.h"
 #include "vo_nono/keypoint/triangulate.h"
 #include "vo_nono/point.h"
 

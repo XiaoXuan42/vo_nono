@@ -47,9 +47,15 @@ inline cv::Point2f project_euclid3d(const cv::Mat &proj_mat,
 }
 
 inline cv::Mat transform_coord(const cv::Mat &Rcw, const cv::Mat &tcw,
-                               const cv::Mat &pt) {
-    return Rcw * pt + tcw;
+                               const cv::Mat &pt_world) {
+    return Rcw * pt_world + tcw;
 }
+
+inline void relative_pose(const cv::Mat &Rcw1, const cv::Mat &tcw1, const cv::Mat &Rcw2, const cv::Mat &tcw2, cv::Mat &R21, cv::Mat &t21) {
+    t21 = tcw2 - tcw1;
+    R21 = Rcw2 * Rcw1.t();
+}
+
 }// namespace vo_nono
 
 #endif//VO_NONO_GEOMETRY_H
