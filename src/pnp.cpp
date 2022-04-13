@@ -44,11 +44,10 @@ inline void _pnp_ransac_select(const std::vector<cv::Point2f>& img_pts,
     }
 }
 
-void _vo_nono_pnp_ransac(const std::vector<cv::Matx31f>& coords,
-                         const std::vector<cv::Point2f>& img_pts,
-                         const Camera& camera, int iter_cnt, float proj_th,
-                         cv::Mat& Rcw, cv::Mat& tcw,
-                         std::vector<bool>& is_inlier) {
+void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
+                     const std::vector<cv::Point2f>& img_pts,
+                     const Camera& camera, int iter_cnt, float proj_th,
+                     cv::Mat& Rcw, cv::Mat& tcw, std::vector<bool>& is_inlier) {
     assert(img_pts.size() > 4);
     std::vector<std::vector<int>> rd_selects;
     _pnp_ransac_select(img_pts, iter_cnt, rd_selects);
@@ -95,10 +94,11 @@ void _vo_nono_pnp_ransac(const std::vector<cv::Matx31f>& coords,
     if (tcw.type() != CV_32F) { tcw.convertTo(tcw, CV_32F); }
 }
 
-void _cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
-                    const std::vector<cv::Point2f>& img_pts,
-                    const Camera& camera, int iter_cnt, float proj_th,
-                    cv::Mat& Rcw, cv::Mat& tcw, std::vector<bool>& is_inlier) {
+void PnP::cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
+                        const std::vector<cv::Point2f>& img_pts,
+                        const Camera& camera, int iter_cnt, float proj_th,
+                        cv::Mat& Rcw, cv::Mat& tcw,
+                        std::vector<bool>& is_inlier) {
     std::vector<int> inlier_index;
     cv::Mat rvec;
     cv::Rodrigues(Rcw, rvec);
@@ -125,27 +125,10 @@ void _cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
     if (tcw.type() != CV_32F) { tcw.convertTo(tcw, CV_32F); }
 }
 
-void pnp_ransac(const std::vector<cv::Matx31f>& coords,
-                const std::vector<cv::Point2f>& img_pts, const Camera& camera,
-                int iter_cnt, float proj_th, cv::Mat& Rcw, cv::Mat& tcw,
-                std::vector<bool>& is_inlier, PNP_RANSAC method) {
-    switch (method) {
-        case CV_PNP_RANSAC:
-            _cv_pnp_ransac(coords, img_pts, camera, iter_cnt, proj_th, Rcw, tcw,
-                           is_inlier);
-            break;
-        case VO_NONO_PNP_RANSAC:
-            _vo_nono_pnp_ransac(coords, img_pts, camera, iter_cnt, proj_th, Rcw,
-                                tcw, is_inlier);
-            break;
-        default:
-            unimplemented();
-    }
-}
-
-void pnp_optimize_proj_err(const std::vector<cv::Matx31f>& coords,
-                           const std::vector<cv::Point2f>& img_pts,
-                           const Camera& camera, cv::Mat& Rcw, cv::Mat& tcw) {
+void PnP::pnp_optimize_proj_err(const std::vector<cv::Matx31f>& coords,
+                                const std::vector<cv::Point2f>& img_pts,
+                                const Camera& camera, cv::Mat& Rcw,
+                                cv::Mat& tcw) {
     cv::Mat rvec;
     cv::Rodrigues(Rcw, rvec);
     rvec.convertTo(rvec, CV_64F);
@@ -155,5 +138,11 @@ void pnp_optimize_proj_err(const std::vector<cv::Matx31f>& coords,
     cv::Rodrigues(rvec, Rcw);
     Rcw.convertTo(Rcw, CV_32F);
     tcw.convertTo(tcw, CV_32F);
+}
+
+void PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
+                          const std::vector<cv::Point2f>& img_pts,
+                          const Camera& camera, cv::Mat& Rcw, cv::Mat& tcw) {
+    // todo
 }
 }// namespace vo_nono

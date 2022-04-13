@@ -173,7 +173,7 @@ void test_bundle_adjustment() {
                 cv::Point2f(proj2.at<float>(0), proj2.at<float>(1)));
     }
 
-    BundleAdjust graph(camera);
+    OptimizeGraph graph(camera);
     std::random_device rd_device;
     std::mt19937 gen(rd_device());
     std::uniform_real_distribution<> dis(-1.0, 1.0);
@@ -193,7 +193,7 @@ void test_bundle_adjustment() {
     for (int i = 0; i < points.size(); ++i) {
         for (int j = 0; j < 2; ++j) { graph.add_edge(j, i, proj[j][i]); }
     }
-    Optimizer::bundle_adjustment(graph, 40);
+    BundleAdjustment::bundle_adjustment(graph, 40);
     for (int i = 0; i < 2; ++i) {
         if (i == 0) {
             std::cout << "Original: " << pose1 << std::endl;

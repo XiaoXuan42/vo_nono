@@ -12,7 +12,7 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # external libraries
 find_package(OpenCV REQUIRED)
 find_package(yaml-cpp REQUIRED)
-find_package(g2o REQUIRED)
+find_package(Ceres REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -22,8 +22,7 @@ target_compile_options(vo_nono PRIVATE -Wall -Werror)
 target_include_directories(vo_nono PUBLIC include/)
 target_link_libraries(vo_nono ${OpenCV_LIBS})
 target_link_libraries(vo_nono yaml-cpp)
-set(G2O_LIBS g2o_core g2o_solver_eigen g2o_types_slam3d g2o_types_sba)
-target_link_libraries(vo_nono ${G2O_LIBS})
 target_link_libraries(vo_nono Threads::Threads)
+target_link_libraries(vo_nono ${CERES_LIBRARIES})
 
 add_subdirectory(app)

@@ -256,8 +256,7 @@ int Frontend::track_by_match_with_keyframe() {
     std::vector<cv::Matx31f> inlier_coords;
     std::vector<cv::Point2f> inlier_img_pts;
     cv::Mat Rcw = m_curframe->get_Rcw(), tcw = m_curframe->get_Tcw();
-    pnp_ransac(pt_coords, img_pts, m_camera, 100, 6, Rcw, tcw, inliers,
-               PNP_RANSAC::VO_NONO_PNP_RANSAC);
+    PnP::pnp_ransac(pt_coords, img_pts, m_camera, 100, 6, Rcw, tcw, inliers);
     assert(inliers.size() == pt_coords.size());
     assert(old_match.size() == pt_coords.size());
     int cnt_inlier = 0;
@@ -282,7 +281,7 @@ int Frontend::track_by_match_with_keyframe() {
             inlier_img_pts.push_back(img_pts[i]);
         }
     }
-    pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
+    PnP::pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_curframe->set_Rcw(Rcw);
     m_curframe->set_Tcw(tcw);
     return cnt_inlier;
@@ -320,8 +319,8 @@ int Frontend::track_by_local_points() {
         return int(map_pt_coords.size());
     }
 
-    TIME_IT(pnp_ransac(map_pt_coords, img_pts, m_camera, 100, 2, Rcw, tcw,
-                       is_inliers, PNP_RANSAC::VO_NONO_PNP_RANSAC),
+    TIME_IT(PnP::pnp_ransac(map_pt_coords, img_pts, m_camera, 100, 2, Rcw, tcw,
+                            is_inliers),
             "projection pnp cost ");
 
     assert(proj_matches.size() == is_inliers.size());
@@ -357,7 +356,8 @@ int Frontend::track_by_local_points() {
                                    proj_matches[i].p_map_pt);
         }
     }
-    pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
+    PnP::pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw,
+                               tcw);
     m_curframe->set_Rcw(Rcw);
     m_curframe->set_Tcw(tcw);
     log_debug_line("Pose estimate using "

@@ -19,17 +19,17 @@ void Map::global_bundle_adjustment() {
 void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
     std::unordered_map<vo_ptr<Frame>, int> frame_to_index;
     std::unordered_map<vo_ptr<MapPoint>, int> point_to_index;
-    BundleAdjust graph(mr_camera);
+    OptimizeGraph graph(mr_camera);
 
     for (auto &frame : m_keyframes) {
         assert(frame_to_index.count(frame) == 0);
-        int cur_cam_index = graph.add_cam_pose(frame->get_pose());
+        int cur_cam_index = graph.add_cam_pose(frame->get_pose(), false);
         for (int i = 0; i < int(frame->kpts.size()); ++i) {
             if (frame->is_index_set(i)) {
                 auto pt = frame->get_map_pt(i);
                 int cur_pt_index = -1;
                 if (point_to_index.count(pt) == 0) {
-                    cur_pt_index = graph.add_point(pt->get_coord());
+                    cur_pt_index = graph.add_point(pt->get_coord(), false);
                     point_to_index[pt] = cur_pt_index;
                 } else {
                     cur_pt_index = point_to_index[pt];
@@ -40,7 +40,7 @@ void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
     }
     lock.unlock();
 
-    Optimizer::bundle_adjustment(graph, 40);
+    BundleAdjustment::bundle_adjustment(graph, 40);
 
     lock.lock();
     for (auto &pair : frame_to_index) {
