@@ -46,20 +46,33 @@ public:
     }
 
 private:
-    int match_with_keyframe(int match_cnt);
+    void reset_state() {
+        mb_new_key_frame = false;
+        mb_match_good = false;
+        mb_track_good = false;
+        m_keyframe_matches.clear();
+    }
+
+    std::vector<cv::DMatch> match_frame(const vo_ptr<Frame> &ref_frame,
+                                        int match_cnt);
     int initialize(const cv::Mat &image);
     bool tracking(const cv::Mat &image, double t);
-    int track_by_match_with_keyframe();
-    int track_by_local_points();
+    int track_by_match(const vo_ptr<Frame> &ref_frame,
+                       const std::vector<cv::DMatch> &matches, float ransac_th);
+    int track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
+                            float r_th, float ransac_th);
+    int track_by_projection_frame(const vo_ptr<Frame> &ref_frame);
+    int track_by_projection_local_map();
     int triangulate_with_keyframe();
 
 private:
     static constexpr int CNT_INIT_MATCHES = 500;
     static constexpr int CNT_KEY_PTS = 1000;
     static constexpr int CNT_MATCHES = 200;
-    static constexpr int CNT_MIN_MATCHES = 20;
+    static constexpr int CNT_MIN_MATCHES = 30;
 
-    void show_keyframe_curframe_match(const std::vector<cv::DMatch> &matches,
+    void show_cur_frame_match(const vo_ptr<Frame> &ref_frame,
+                                      const std::vector<cv::DMatch> &matches,
                                       const std::string &prefix) const;
 
     FrontendConfig m_config;
@@ -67,15 +80,19 @@ private:
     State m_state;
 
     vo_ptr<Frame> m_keyframe;
-    vo_ptr<Frame> m_curframe;
+    vo_ptr<Frame> m_cur_frame;
+    vo_ptr<Frame> m_prev_frame;
     vo_uptr<ORBMatcher> m_matcher;
-    std::vector<cv::DMatch> m_matches;
-    std::vector<bool> m_matches_inlier;
+
+    std::vector<cv::DMatch> m_keyframe_matches;
 
     vo_ptr<Map> m_map;
 
     MotionPredictor m_motion_pred;
     bool mb_new_key_frame;
+
+    bool mb_track_good;
+    bool mb_match_good;
 };
 }// namespace vo_nono
 

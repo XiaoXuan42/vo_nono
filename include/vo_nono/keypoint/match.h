@@ -41,7 +41,7 @@ public:
           mb_space_hash(false) {}
 
     std::vector<ProjMatch> match_by_projection(
-            const std::vector<vo_ptr<MapPoint>> &map_points, float dist_th);
+            const std::vector<vo_ptr<MapPoint>> &map_points, float r_th);
     [[nodiscard]] std::vector<cv::DMatch> match_descriptor_bf(
             const cv::Mat &o_descpt, float soft_dis_th, float hard_dis_th,
             int expect_cnt) const;
@@ -68,6 +68,16 @@ public:
         m_tcw = tcw;
     }
 
+
+private:
+    constexpr static int WIDTH_TOTAL_GRID = 64;
+    constexpr static int HEIGHT_TOTAL_GRID = 48;
+    constexpr static int MAX_DESC_DIS = 100;
+
+    struct KeyPointGrid {
+        std::vector<int> grid[HEIGHT_TOTAL_GRID][WIDTH_TOTAL_GRID];
+    };
+
     void space_hash() {
         if (mb_space_hash) { return; }
         for (size_t i = 0; i < kpts.size(); ++i) {
@@ -82,15 +92,6 @@ public:
         }
         mb_space_hash = true;
     }
-
-private:
-    constexpr static int WIDTH_TOTAL_GRID = 64;
-    constexpr static int HEIGHT_TOTAL_GRID = 48;
-    constexpr static int MAX_DESC_DIS = 100;
-
-    struct KeyPointGrid {
-        std::vector<int> grid[HEIGHT_TOTAL_GRID][WIDTH_TOTAL_GRID];
-    };
 
     // Bit set count operation from
     // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel

@@ -6,6 +6,7 @@
 #include <ctime>
 #include <iostream>
 #include <opencv2/core.hpp>
+#include <opencv2/calib3d.hpp>
 #include <random>
 
 namespace vo_nono {
@@ -90,6 +91,9 @@ void rotation_mat_to_quaternion(const cv::Mat &R, T Q[]) {
 }
 
 cv::Mat quaternion_to_rotation_mat(const float Q[]);
+
+void angle_axis_to_rotation_mat(const double angle_axis[3],
+                                double result[3][3]);
 
 template<typename T, typename U>
 [[nodiscard]] inline std::vector<T> filter_by_mask(

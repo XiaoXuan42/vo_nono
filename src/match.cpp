@@ -7,8 +7,8 @@
 
 namespace vo_nono {
 std::vector<ProjMatch> ORBMatcher::match_by_projection(
-        const std::vector<vo_ptr<MapPoint>> &map_points, float dist_th) {
-    assert(mb_space_hash);
+        const std::vector<vo_ptr<MapPoint>> &map_points, float r_th) {
+    if (!mb_space_hash) { space_hash(); }
     std::vector<cv::Matx31f> coord3ds;
     std::vector<cv::Point2f> img_pts;
     std::vector<vo_ptr<MapPoint>> map_pts;
@@ -26,13 +26,13 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
             in_image += 1;
 
             int min_width_id =
-                    get_grid_width_id(std::max(0.0f, proj_img_pt.x - dist_th));
+                    get_grid_width_id(std::max(0.0f, proj_img_pt.x - r_th));
             int max_width_id = get_grid_width_id(
-                    std::min(m_total_width, proj_img_pt.x + dist_th));
+                    std::min(m_total_width, proj_img_pt.x + r_th));
             int min_height_id =
-                    get_grid_height_id(std::max(0.0f, proj_img_pt.y - dist_th));
+                    get_grid_height_id(std::max(0.0f, proj_img_pt.y - r_th));
             int max_height_id = get_grid_height_id(
-                    std::min(m_total_height, proj_img_pt.y + dist_th));
+                    std::min(m_total_height, proj_img_pt.y + r_th));
 
             int best_id = -1;
             int best_dis = std::numeric_limits<int>::max();
@@ -41,8 +41,8 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
                     for (auto &level_grid : m_pyramid_grids) {
                         for (auto index : level_grid.grid[i][j]) {
                             cv::KeyPoint kpt = kpts[index];
-                            if (std::fabs(kpt.pt.x - proj_img_pt.x) > dist_th ||
-                                std::fabs(kpt.pt.y - proj_img_pt.y) > dist_th) {
+                            if (std::fabs(kpt.pt.x - proj_img_pt.x) > r_th ||
+                                std::fabs(kpt.pt.y - proj_img_pt.y) > r_th) {
                                 continue;
                             }
                             int cur_dis = orb_distance(descriptors.row(index),
@@ -195,9 +195,7 @@ void ORBMatcher::filter_match_by_ess(const cv::Mat &Ess,
         cv::Mat mat_res = pt2.t() * l;
         double diff = std::abs(double(mat_res.at<float>(0)));
         double l_norm = cv::norm(l);
-        if (diff > th * l_norm) {
-            mask[i] = false;
-        }
+        if (diff > th * l_norm) { mask[i] = false; }
     }
 }
 }// namespace vo_nono

@@ -6,9 +6,9 @@
 #include <opencv2/core.hpp>
 #include <random>
 
-#include "vo_nono/ba.h"
 #include "vo_nono/camera.h"
 #include "vo_nono/motion.h"
+#include "vo_nono/optimize_graph.h"
 #include "vo_nono/util.h"
 
 cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
@@ -157,7 +157,7 @@ void test_bundle_adjustment() {
 
     std::vector<cv::Mat> points, noise_points;
     std::vector<cv::Point2f> proj[2];
-    constexpr int pt_cnt = 20;
+    constexpr int pt_cnt = 1000;
     for (int i = 0; i < pt_cnt; ++i) {
         cv::Mat coord = (cv::Mat_<float>(3, 1) << i + 2, 4 * i + 3, 500);
         points.push_back(coord);
@@ -178,22 +178,31 @@ void test_bundle_adjustment() {
     std::mt19937 gen(rd_device());
     std::uniform_real_distribution<> dis(-1.0, 1.0);
 
-    cv::Mat noise_pose1 = pose1;
-    cv::Mat noise_pose2 = pose2;
-    graph.add_cam_pose(noise_pose1);
-    graph.add_cam_pose(noise_pose2);
+    cv::Mat noise_pose1 = pose1.clone();
+    noise_pose1.col(3) += 10 * dis(gen) * cv::Mat::ones(3, 1, CV_32F);
+    cv::Mat noise_pose2 = pose2.clone();
+    noise_pose2.col(3) += 10 * dis(gen) * cv::Mat::ones(3, 1, CV_32F);
+    graph.add_cam_pose(noise_pose1, false);
+    graph.add_cam_pose(noise_pose2, false);
     for (int i = 0; i < points.size(); ++i) {
         cv::Mat noise_point = points[i].clone();
         noise_point.at<float>(0) += dis(gen);
         noise_point.at<float>(1) += dis(gen);
         noise_point.at<float>(2) += dis(gen);
         noise_points.push_back(noise_point);
-        graph.add_point(noise_point);
+        graph.add_point(noise_point, false);
     }
     for (int i = 0; i < points.size(); ++i) {
         for (int j = 0; j < 2; ++j) { graph.add_edge(j, i, proj[j][i]); }
     }
-    BundleAdjustment::bundle_adjustment(graph, 40);
+
+    graph.to_problem();
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::SPARSE_SCHUR;
+    options.minimizer_progress_to_stdout = true;
+    auto summary = graph.evaluate_solver(options);
+    std::cout << summary.BriefReport() << std::endl;
+
     for (int i = 0; i < 2; ++i) {
         if (i == 0) {
             std::cout << "Original: " << pose1 << std::endl;
@@ -202,12 +211,65 @@ void test_bundle_adjustment() {
             std::cout << "Original: " << pose2 << std::endl;
             std::cout << "Noise: " << noise_pose2 << std::endl;
         }
-        std::cout << "Optimized: " << graph.optim_cam_poses[i] << std::endl;
+        cv::Mat Rcw, tcw;
+        graph.get_cam_pose(i, Rcw, tcw);
+        std::cout << "Optimized:\n" << Rcw << "\n" << tcw << std::endl;
     }
     for (int i = 0; i < points.size(); ++i) {
         std::cout << "Original: " << points[i] << std::endl;
         std::cout << "Noise: " << noise_points[i] << std::endl;
-        std::cout << "Optimized: " << graph.optim_points[i] << std::endl;
+        cv::Mat coord;
+        graph.get_point_coord(i, coord);
+        std::cout << "Optimized: " << coord << std::endl;
+
+        std::cout << "Loss 1: " << graph.get_loss(0, i) << std::endl;
+        std::cout << "Loss 2: " << graph.get_loss(1, i) << std::endl;
+    }
+}
+
+struct TestCeresCost {
+    template<typename T>
+    bool operator()(const T *const data, T *residual) const {
+        residual[0] = data[0] - 10.0;
+        return true;
+    }
+
+    static ceres::CostFunction *create() {
+        return new ceres::AutoDiffCostFunction<TestCeresCost, 1, 1>(
+                new TestCeresCost());
+    }
+};
+
+void test_ceres() {
+    double number[2];
+    number[0] = 5.0f;
+    number[1] = -8.0f;
+    ceres::Problem problem;
+    auto id0 = problem.AddResidualBlock(TestCeresCost::create(), nullptr,
+                                        &number[0]);
+    auto id1 = problem.AddResidualBlock(TestCeresCost::create(), nullptr,
+                                        &number[1]);
+    std::vector<ceres::ResidualBlockId> residual_ids;
+    residual_ids.push_back(id1);
+    residual_ids.push_back(id0);
+    ceres::Problem::EvaluateOptions options;
+    options.residual_blocks = residual_ids;
+    std::vector<double> residual_vals;
+    problem.Evaluate(options, nullptr, &residual_vals, nullptr, nullptr);
+    for (int i = 0; i < int(residual_vals.size()); ++i) {
+        std::cout << number[1 - i] << ": " << residual_vals[i] << std::endl;
+    }
+
+    ceres::Solver::Options option;
+    option.linear_solver_type = ceres::DENSE_QR;
+    option.minimizer_progress_to_stdout = true;
+    ceres::Solver::Summary summary;
+    ceres::Solve(option, &problem, &summary);
+    std::cout << summary.BriefReport() << std::endl;
+    std::cout << number[0] << " " << number[1] << std::endl;
+    problem.Evaluate(options, nullptr, &residual_vals, nullptr, nullptr);
+    for (int i = 0; i < int(residual_vals.size()); ++i) {
+        std::cout << number[1 - i] << ": " << residual_vals[i] << std::endl;
     }
 }
 
