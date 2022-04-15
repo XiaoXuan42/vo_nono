@@ -27,25 +27,32 @@ public:
         edges[cam_graph_id].push_back(cur_edge);
     }
 
-    int add_cam_pose(const cv::Mat &pose, bool b_margin) {
-        assert(pose.type() == CV_32F);
-        assert(pose.rows == 3);
-        assert(pose.cols == 4);
+    int add_cam_pose(const cv::Mat &Rcw, const cv::Mat &Tcw, bool b_margin) {
+        assert(Rcw.type() == CV_32F);
+        assert(Rcw.rows == 3);
+        assert(Rcw.cols == 3);
+        assert(Tcw.type() == CV_32F);
+        assert(Tcw.rows == 3);
+        assert(Tcw.cols == 1);
         int cur_cam_id = int(cam_poses.size());
-        cv::Mat Rcw = pose.colRange(0, 3);
+        cv::Mat Rcw_64;
         Eigen::Matrix3d R;
-        Rcw.convertTo(Rcw, CV_64F);
-        cv::cv2eigen(Rcw, R);
+        Rcw.convertTo(Rcw_64, CV_64F);
+        cv::cv2eigen(Rcw_64, R);
         Eigen::AngleAxisd angle_axis(R);
         Eigen::Vector3d angle_axis_vec = angle_axis.angle() * angle_axis.axis();
 
         cam_poses.push_back(std::vector<double>{
                 angle_axis_vec(0), angle_axis_vec(1), angle_axis_vec(2),
-                double(pose.at<float>(0, 3)), double(pose.at<float>(1, 3)),
-                double(pose.at<float>(2, 3))});
+                double(Tcw.at<float>(0)), double(Tcw.at<float>(1)),
+                double(Tcw.at<float>(2))});
         edges.emplace_back(std::vector<Edge>());
         b_marginalized_cam.push_back(b_margin);
         return cur_cam_id;
+    }
+
+    int add_cam_pose(const cv::Mat &pose, bool b_margin) {
+        return add_cam_pose(pose.colRange(0, 3), pose.col(3), b_margin);
     }
 
     int add_point(const cv::Mat &point, bool b_margin) {
@@ -75,6 +82,7 @@ public:
         T = cv::Mat::zeros(3, 1, CV_32F);
         for (int i = 0; i < 3; ++i) { T.at<float>(i) = float(points[id][i]); }
     }
+    void set_loss_kernel(ceres::LossFunction *l) { loss = l; }
 
 private:
     void evaluate_residual(ceres::Problem::EvaluateOptions &option) {

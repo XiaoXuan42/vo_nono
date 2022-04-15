@@ -2,6 +2,7 @@
 
 #include <opencv2/calib3d.hpp>
 
+#include "vo_nono/optimize_graph.h"
 #include "vo_nono/util.h"
 
 namespace vo_nono {
@@ -143,6 +144,23 @@ void PnP::pnp_optimize_proj_err(const std::vector<cv::Matx31f>& coords,
 void PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
                           const std::vector<cv::Point2f>& img_pts,
                           const Camera& camera, cv::Mat& Rcw, cv::Mat& tcw) {
-    // todo
+    std::vector<bool> is_inlier(coords.size(), true);
+    OptimizeGraph graph(camera);
+    graph.add_cam_pose(Rcw, tcw, false);
+    for (int j = 0; j < int(coords.size()); ++j) {
+        if (is_inlier[j]) {
+            graph.add_point(cv::Mat(coords[j]), true);
+            graph.add_edge(0, j, img_pts[j]);
+        }
+    }
+    graph.set_loss_kernel(new ceres::HuberLoss(1.0));
+    graph.to_problem();
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::ITERATIVE_SCHUR;
+    options.min_linear_solver_iterations = 40;
+    options.max_linear_solver_iterations = 40;
+    auto summary = graph.evaluate_solver(options);
+    std::cerr << summary.BriefReport() << std::endl;
+    graph.get_cam_pose(0, Rcw, tcw);
 }
 }// namespace vo_nono

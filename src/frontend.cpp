@@ -254,6 +254,7 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
         return int(old_matches.size());
     }
 
+    int cnt_inlier = 0;
     std::vector<bool> inliers;
     std::vector<cv::Matx31f> inlier_coords;
     std::vector<cv::Point2f> inlier_img_pts;
@@ -262,7 +263,6 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
                     inliers);
     assert(inliers.size() == pt_coords.size());
     assert(old_matches.size() == pt_coords.size());
-    int cnt_inlier = 0;
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
         if (inliers[i] && !m_cur_frame->is_index_set(old_matches[i].trainIdx)) {
             cnt_inlier += 1;
@@ -323,7 +323,7 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
     log_debug_line("Projection ransac with " << proj_matches.size()
                                              << " points and " << cnt_proj_match
                                              << " matches.");
-/*
+    /*
 
     if (m_cur_frame->id >= 180) {
         std::vector<cv::DMatch> dmatches;
