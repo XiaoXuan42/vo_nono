@@ -162,8 +162,7 @@ void PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
     options.linear_solver_type = ceres::ITERATIVE_SCHUR;
     options.min_linear_solver_iterations = 40;
     options.max_linear_solver_iterations = 40;
-    auto summary = graph.evaluate_solver(options);
-    std::cerr << summary.BriefReport() << std::endl;
+    graph.evaluate_solver(options);
     graph.get_cam_pose(0, Rcw, tcw);
 }
 }// namespace vo_nono

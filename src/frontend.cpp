@@ -209,7 +209,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
 
     if (!mb_match_good && mb_track_good) {
         if (double(cnt_match) < 0.2 * double(m_keyframe->get_cnt_map_pt())) {
-            //mb_new_key_frame = true;
+            mb_new_key_frame = true;
         }
     }
 
@@ -281,8 +281,6 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             inlier_img_pts.push_back(img_pts[i]);
         }
     }
-    /*PnP::pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw,
-                               tcw);*/
     PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_cur_frame->set_Rcw(Rcw);
     m_cur_frame->set_Tcw(tcw);
@@ -355,8 +353,7 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
                                     proj_matches[i].p_map_pt);
         }
     }
-    PnP::pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw,
-                               tcw);
+    PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_cur_frame->set_Rcw(Rcw);
     m_cur_frame->set_Tcw(tcw);
     log_debug_line("Pose estimate using "
