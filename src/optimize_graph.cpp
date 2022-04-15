@@ -190,9 +190,10 @@ void OptimizeGraph::get_cam_pose(int id, cv::Mat& Rcw, cv::Mat& Tcw) const {
     double r[9];
     ceres::AngleAxisToRotationMatrix(cam_poses[id].data(), r);
     Rcw = cv::Mat::zeros(3, 3, CV_32F);
+    // note: r is column major
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            Rcw.at<float>(i, j) = float(r[i * 3 + j]);
+            Rcw.at<float>(j, i) = float(r[i * 3 + j]);
         }
     }
     Tcw = cv::Mat::zeros(3, 1, CV_32F);

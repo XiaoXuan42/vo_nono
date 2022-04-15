@@ -156,6 +156,9 @@ void PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
     graph.set_loss_kernel(new ceres::HuberLoss(1.0));
     graph.to_problem();
     ceres::Solver::Options options;
+    options.minimizer_type = ceres::TRUST_REGION;
+    options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
+    options.use_nonmonotonic_steps = true;
     options.linear_solver_type = ceres::ITERATIVE_SCHUR;
     options.min_linear_solver_iterations = 40;
     options.max_linear_solver_iterations = 40;

@@ -157,7 +157,7 @@ void test_bundle_adjustment() {
 
     std::vector<cv::Mat> points, noise_points;
     std::vector<cv::Point2f> proj[2];
-    constexpr int pt_cnt = 1000;
+    constexpr int pt_cnt = 5;
     for (int i = 0; i < pt_cnt; ++i) {
         cv::Mat coord = (cv::Mat_<float>(3, 1) << i + 2, 4 * i + 3, 500);
         points.push_back(coord);
@@ -198,7 +198,9 @@ void test_bundle_adjustment() {
 
     graph.to_problem();
     ceres::Solver::Options options;
-    options.linear_solver_type = ceres::SPARSE_SCHUR;
+    options.minimizer_type = ceres::TRUST_REGION;
+    options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
     options.minimizer_progress_to_stdout = true;
     auto summary = graph.evaluate_solver(options);
     std::cout << summary.BriefReport() << std::endl;

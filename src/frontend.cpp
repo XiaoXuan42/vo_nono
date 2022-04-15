@@ -281,8 +281,9 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             inlier_img_pts.push_back(img_pts[i]);
         }
     }
-    PnP::pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw,
-                               tcw);
+    /*PnP::pnp_optimize_proj_err(inlier_coords, inlier_img_pts, m_camera, Rcw,
+                               tcw);*/
+    PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_cur_frame->set_Rcw(Rcw);
     m_cur_frame->set_Tcw(tcw);
     return cnt_inlier;
