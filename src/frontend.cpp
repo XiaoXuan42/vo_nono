@@ -100,6 +100,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
                 m_map->insert_key_frame(m_cur_frame);
                 m_keyframe = m_cur_frame;
                 mb_new_key_frame = false;
+                m_points_seen.clear();
             }
             b_succ = true;
         }
@@ -395,7 +396,7 @@ int Frontend::triangulate_with_keyframe() {
     std::vector<cv::Mat> tri_results;
     Triangulator::triangulate_and_filter_frames(
             m_keyframe.get(), m_cur_frame.get(), m_camera.get_intrinsic_mat(),
-            valid_match, tri_results, tri_inliers, 1000);
+            valid_match, tri_results, tri_inliers, 10000);
 
     assert(valid_match.size() == tri_inliers.size());
     int cnt_succ = 0;
@@ -405,6 +406,15 @@ int Frontend::triangulate_with_keyframe() {
                 vo_ptr<MapPoint> target_pt;
                 if (m_keyframe->is_index_set(valid_match[i].queryIdx)) {
                     target_pt = m_keyframe->get_map_pt(valid_match[i].queryIdx);
+                    if (m_points_seen.count(target_pt)) {
+                        int seen_times = m_points_seen[target_pt];
+                        cv::Mat avg_tri =
+                                (float(seen_times) * target_pt->get_coord() +
+                                 tri_results[i]) /
+                                (float(seen_times) + 1.0f);
+                        target_pt->set_coord(avg_tri);
+                        m_points_seen[target_pt] += 1;
+                    }
                 } else {
                     target_pt = std::make_shared<MapPoint>(
                             MapPoint::create_map_point(
@@ -412,6 +422,8 @@ int Frontend::triangulate_with_keyframe() {
                                     m_keyframe->descriptor.row(
                                             valid_match[i].queryIdx)));
                     m_keyframe->set_map_pt(valid_match[i].queryIdx, target_pt);
+                    assert(!m_points_seen.count(target_pt));
+                    m_points_seen[target_pt] = 1;
                     cnt_succ += 1;
                 }
                 m_cur_frame->set_map_pt(valid_match[i].trainIdx, target_pt);

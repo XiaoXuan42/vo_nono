@@ -85,6 +85,7 @@ private:
     vo_uptr<ORBMatcher> m_matcher;
 
     std::vector<cv::DMatch> m_keyframe_matches;
+    std::unordered_map<vo_ptr<MapPoint>, int> m_points_seen;
 
     vo_ptr<Map> m_map;
 
