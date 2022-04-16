@@ -5,11 +5,13 @@
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core.hpp>
 #include <random>
+#include <thread>
 
 #include "vo_nono/camera.h"
 #include "vo_nono/motion.h"
 #include "vo_nono/optimize_graph.h"
 #include "vo_nono/util.h"
+#include "vo_nono/util/queue.h"
 
 cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
     cv::Mat proj(3, 4, CV_32F);
@@ -275,7 +277,50 @@ void test_ceres() {
     }
 }
 
+void test_consumer_blocking_queue() {
+    vo_nono::ConsumerBlockingQueue<char> q;
+    std::thread consumer[10], producer[10];
+    char slot[20] = "good morning!";
+    for (int i = 0; i < 10; ++i) {
+        consumer[i] = std::thread([&, i=i] {
+            slot[i + 10] = q.pop();
+            if (slot[i + 10] == '(') { slot[i + 10] = ')'; }
+        });
+    }
+    for (int i = 0; i < 10; ++i) {
+        producer[i] = std::thread([&, i=i] {
+            slot[i] = '(';
+            q.push('(');
+        });
+    }
+    for (int i = 0; i < 10; ++i) { consumer[i].join(); }
+    for (int i = 0; i < 10; ++i) { producer[i].join(); }
+    for (int i = 0; i < 20; ++i) { std::cout << slot[i]; }
+    std::cout << std::endl;
+
+    char slot2[20] = "good afternoon";
+    for (int i = 0; i < 20; ++i) {
+        if (i % 2 == 0) {
+            consumer[i] = std::thread([&, i=i] {
+                slot2[i/2+10] = q.pop();
+                if (slot2[i/2+10] == '(') { slot2[i/2+10] = ')'; }
+            });
+        } else {
+            consumer[i] = std::thread([&, i=i] {
+                slot2[i/2] = '(';
+                q.push('(');
+            });
+        }
+    }
+    for (int i = 0; i < 10; ++i) { consumer[i].join(); }
+    for (int i = 0; i < 10; ++i) { producer[i].join(); }
+    for (int i = 0; i < 20; ++i) {
+        std::cout << slot2[i];
+    }
+    std::cout << std::endl;
+}
+
 int main() {
-    test_bundle_adjustment();
+    test_consumer_blocking_queue();
     return 0;
 }
