@@ -86,9 +86,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         int init_state = initialize(image);
         if (init_state == 0) {
             m_state = State::Tracking;
-            m_map->insert_frame(m_keyframe);
-            m_map->insert_frame(m_cur_frame);
-            m_map->insert_key_frame(m_keyframe);
+            m_map->initialize(m_keyframe, m_cur_frame);
             b_succ = true;
         } else if (init_state == -1) {
             // not enough matches
@@ -96,9 +94,10 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         }
     } else if (m_state == State::Tracking) {
         if (tracking(image, t)) {
-            m_map->insert_frame(m_cur_frame);
+            FrameMessage message(m_cur_frame, m_keyframe_matches,
+                                 mb_new_key_frame);
+            m_map->insert_frame(message);
             if (mb_new_key_frame) {
-                m_map->insert_key_frame(m_cur_frame);
                 m_keyframe = m_cur_frame;
                 mb_new_key_frame = false;
                 m_points_seen.clear();
@@ -214,8 +213,6 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
             mb_new_key_frame = true;
         }
     }
-
-    if (mb_track_good) { triangulate_with_keyframe(); }
 
     log_debug_line("Track good: " << mb_track_good);
     log_debug_line("Match good: " << mb_match_good);
@@ -373,67 +370,6 @@ int Frontend::track_by_projection_frame(const vo_ptr<Frame> &ref_frame) {
 int Frontend::track_by_projection_local_map() {
     std::vector<vo_ptr<MapPoint>> local_pts = m_map->get_local_map_points();
     return track_by_projection(local_pts, 20, 15);
-}
-
-int Frontend::triangulate_with_keyframe() {
-    std::vector<cv::DMatch> valid_match;
-    std::vector<bool> mask;
-    std::vector<cv::Point2f> pts1, pts2;
-    cv::Mat R21, t21;
-    Geometry::relative_pose(m_keyframe->get_Rcw(), m_keyframe->get_Tcw(),
-                            m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw(), R21,
-                            t21);
-    cv::Mat ess = Epipolar::compute_essential(R21, t21);
-    for (auto &match : m_keyframe_matches) {
-        pts1.push_back(m_keyframe->kpts[match.queryIdx].pt);
-        pts2.push_back(m_cur_frame->kpts[match.trainIdx].pt);
-    }
-    ORBMatcher::filter_match_by_ess(ess, m_camera.get_intrinsic_mat(), pts1,
-                                    pts2, 0.01, mask);
-    valid_match = filter_by_mask(m_keyframe_matches, mask);
-    log_debug_line("Before ess check: " << m_keyframe_matches.size()
-                                        << " after: " << valid_match.size());
-
-    std::vector<bool> tri_inliers;
-    std::vector<cv::Mat> tri_results;
-    Triangulator::triangulate_and_filter_frames(
-            m_keyframe.get(), m_cur_frame.get(), m_camera.get_intrinsic_mat(),
-            valid_match, tri_results, tri_inliers, 10000);
-
-    assert(valid_match.size() == tri_inliers.size());
-    int cnt_succ = 0;
-    for (int i = 0; i < int(tri_inliers.size()); ++i) {
-        if (tri_inliers[i]) {
-            if (!m_cur_frame->is_index_set(valid_match[i].trainIdx)) {
-                vo_ptr<MapPoint> target_pt;
-                if (m_keyframe->is_index_set(valid_match[i].queryIdx)) {
-                    target_pt = m_keyframe->get_map_pt(valid_match[i].queryIdx);
-                    if (m_points_seen.count(target_pt)) {
-                        int seen_times = m_points_seen[target_pt];
-                        cv::Mat avg_tri =
-                                (float(seen_times) * target_pt->get_coord() +
-                                 tri_results[i]) /
-                                (float(seen_times) + 1.0f);
-                        target_pt->set_coord(avg_tri);
-                        m_points_seen[target_pt] += 1;
-                    }
-                } else {
-                    target_pt = std::make_shared<MapPoint>(
-                            MapPoint::create_map_point(
-                                    tri_results[i],
-                                    m_keyframe->descriptor.row(
-                                            valid_match[i].queryIdx)));
-                    m_keyframe->set_map_pt(valid_match[i].queryIdx, target_pt);
-                    assert(!m_points_seen.count(target_pt));
-                    m_points_seen[target_pt] = 1;
-                    cnt_succ += 1;
-                }
-                m_cur_frame->set_map_pt(valid_match[i].trainIdx, target_pt);
-            }
-        }
-    }
-    log_debug_line("Triangulated " << cnt_succ << " points.");
-    return cnt_succ;
 }
 
 void Frontend::show_cur_frame_match(const vo_ptr<Frame> &ref_frame,

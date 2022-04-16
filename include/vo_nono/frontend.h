@@ -63,7 +63,6 @@ private:
                             float r_th, float ransac_th);
     int track_by_projection_frame(const vo_ptr<Frame> &ref_frame);
     int track_by_projection_local_map();
-    int triangulate_with_keyframe();
 
 private:
     static constexpr int CNT_INIT_MATCHES = 500;
