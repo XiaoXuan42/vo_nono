@@ -2,8 +2,9 @@
 
 #include <iostream>
 
-#include "vo_nono/keypoint/geometry.h"
-#include "vo_nono/util.h"
+#include "vo_nono/util/geometry.h"
+#include "vo_nono/util/histogram.h"
+#include "vo_nono/util/util.h"
 
 namespace vo_nono {
 std::vector<ProjMatch> ORBMatcher::match_by_projection(
@@ -16,10 +17,10 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
     std::unordered_map<int, int> book;
 
     int proj_exceed = 0, in_image = 0, no_near = 0, collide = 0;
-    cv::Mat proj_mat = get_proj_mat(m_camera_intrinsic, m_Rcw, m_tcw);
+    cv::Mat proj_mat = Geometry::get_proj_mat(m_camera_intrinsic, m_Rcw, m_tcw);
     for (auto &map_pt : map_points) {
-        cv::Point2f proj_img_pt = hm2d_to_euclid2d(
-                proj_mat * euclid3d_to_hm3d(map_pt->get_coord()));
+        cv::Point2f proj_img_pt = Geometry::hm2d_to_euclid2d(
+                proj_mat * Geometry::euclid3d_to_hm3d(map_pt->get_coord()));
         auto coord = cv::Matx31f(map_pt->get_coord());
         if (proj_img_pt.x >= 0 && proj_img_pt.x < m_total_width &&
             proj_img_pt.y >= 0 && proj_img_pt.y < m_total_height) {

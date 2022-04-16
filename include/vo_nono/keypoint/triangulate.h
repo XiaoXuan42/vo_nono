@@ -24,6 +24,9 @@ public:
             const std::vector<cv::DMatch> &matches,
             std::vector<cv::Mat> &tri_result, std::vector<bool> &is_inlier,
             double grad_th);
+
+private:
+    constexpr static double EPS = 0.001;
 };
 }// namespace vo_nono
 

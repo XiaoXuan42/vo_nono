@@ -10,7 +10,8 @@
 #include "vo_nono/keypoint/triangulate.h"
 #include "vo_nono/pnp.h"
 #include "vo_nono/point.h"
-#include "vo_nono/util.h"
+#include "vo_nono/util/macro.h"
+#include "vo_nono/util/util.h"
 
 namespace vo_nono {
 namespace {
@@ -379,8 +380,9 @@ int Frontend::triangulate_with_keyframe() {
     std::vector<bool> mask;
     std::vector<cv::Point2f> pts1, pts2;
     cv::Mat R21, t21;
-    relative_pose(m_keyframe->get_Rcw(), m_keyframe->get_Tcw(),
-                  m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw(), R21, t21);
+    Geometry::relative_pose(m_keyframe->get_Rcw(), m_keyframe->get_Tcw(),
+                            m_cur_frame->get_Rcw(), m_cur_frame->get_Tcw(), R21,
+                            t21);
     cv::Mat ess = Epipolar::compute_essential(R21, t21);
     for (auto &match : m_keyframe_matches) {
         pts1.push_back(m_keyframe->kpts[match.queryIdx].pt);

@@ -3,7 +3,7 @@
 #include <opencv2/calib3d.hpp>
 
 #include "vo_nono/optimize_graph.h"
-#include "vo_nono/util.h"
+#include "vo_nono/util/rand.h"
 
 namespace vo_nono {
 inline void _pnp_ransac_select(const std::vector<cv::Point2f>& img_pts,
@@ -17,7 +17,7 @@ inline void _pnp_ransac_select(const std::vector<cv::Point2f>& img_pts,
         for (int j = 0; j < 4; ++j) {
             int local_violate_cnt = 0;
             while (true) {
-                int propose = int(rand64() % total_sz);
+                int propose = int(Rand::rand64() % total_sz);
                 bool is_same = false, is_near = false;
                 cv::Point2f cur_pt = img_pts[propose];
                 for (int k = 0; k < j; ++k) {

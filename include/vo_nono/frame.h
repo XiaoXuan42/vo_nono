@@ -11,7 +11,7 @@
 #include "vo_nono/camera.h"
 #include "vo_nono/point.h"
 #include "vo_nono/types.h"
-#include "vo_nono/util.h"
+#include "vo_nono/util/macro.h"
 
 namespace vo_nono {
 class Frame {

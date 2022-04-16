@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-#include "vo_nono/util.h"
+#include "vo_nono/util/geometry.h"
 
 namespace vo_nono {
 void MotionPredictor::inform_pose(const cv::Mat& new_Rcw,
@@ -14,7 +14,7 @@ void MotionPredictor::inform_pose(const cv::Mat& new_Rcw,
     assert(new_Rcw.cols == 3);
     assert(new_Rcw.rows == 3);
     m_t[m_cur] = new_tcw.clone();
-    rotation_mat_to_quaternion<float>(new_Rcw, m_q[m_cur]);
+    Geometry::rotation_mat_to_quaternion<float>(new_Rcw, m_q[m_cur]);
     m_time[m_cur] = time;
     m_cur ^= 1;
     m_inform_cnt += 1;
@@ -50,6 +50,6 @@ void MotionPredictor::predict_pose(double time, cv::Mat& Rcw,
     auto q_length = (float) sqrt(
             (double) (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]));
     for (int i = 0; i < 4; ++i) { q[i] /= q_length; }
-    Rcw = quaternion_to_rotation_mat(q);
+    Rcw = Geometry::quaternion_to_rotation_mat(q);
 }
 }// namespace vo_nono

@@ -3,14 +3,14 @@
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
-#include "vo_nono/util.h"
+#include "vo_nono/util/geometry.h"
 
 namespace vo_nono {
 namespace {
 inline Eigen::Matrix3d angle_axis_to_rotation_mat_eigen(
         const double angle_axis[3]) {
     double res[3][3];
-    angle_axis_to_rotation_mat(angle_axis, res);
+    Geometry::angle_axis_to_rotation_mat(angle_axis, res);
     Eigen::Matrix3d m;
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) { m(i, j) = res[i][j]; }

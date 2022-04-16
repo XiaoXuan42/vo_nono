@@ -2,8 +2,7 @@
 
 #include <opencv2/calib3d.hpp>
 
-#include "vo_nono/keypoint/geometry.h"
-#include "vo_nono/util.h"
+#include "vo_nono/util/geometry.h"
 
 namespace vo_nono {
 void Triangulator::triangulate(const cv::Mat& proj1, const cv::Mat& proj2,
@@ -16,7 +15,7 @@ void Triangulator::triangulate(const cv::Mat& proj1, const cv::Mat& proj2,
     cv::triangulatePoints(proj1, proj2, img_pt1, img_pt2, tri_res);
     result.reserve(tri_res.cols);
     for (int i = 0; i < tri_res.cols; ++i) {
-        result.push_back(hm3d_to_euclid3d(tri_res.col(i)));
+        result.push_back(Geometry::hm3d_to_euclid3d(tri_res.col(i)));
     }
 }
 
@@ -35,8 +34,8 @@ int Triangulator::filter_triangulate(const cv::Mat& Rcw1, const cv::Mat& tcw1,
             is_inlier[i] = false;
             continue;
         }
-        cv::Mat coord_c1 = transform_coord(Rcw1, tcw1, pt);
-        cv::Mat coord_c2 = transform_coord(Rcw2, tcw2, pt);
+        cv::Mat coord_c1 = Geometry::transform_coord(Rcw1, tcw1, pt);
+        cv::Mat coord_c2 = Geometry::transform_coord(Rcw2, tcw2, pt);
         // depth must be positive
         if (coord_c1.at<float>(2, 0) < EPS || coord_c2.at<float>(2, 0) < EPS) {
             is_inlier[i] = false;
@@ -64,10 +63,10 @@ int Triangulator::triangulate_and_filter_frames(
         std::vector<cv::Mat>& tri_result, std::vector<bool>& is_inlier,
         double grad_th) {
     std::vector<cv::Point2f> img_pt1, img_pt2;
-    cv::Mat proj1 = get_proj_mat(cam_intrinsic_mat, frame1->get_Rcw(),
-                                 frame1->get_Tcw());
-    cv::Mat proj2 = get_proj_mat(cam_intrinsic_mat, frame2->get_Rcw(),
-                                 frame2->get_Tcw());
+    cv::Mat proj1 = Geometry::get_proj_mat(cam_intrinsic_mat, frame1->get_Rcw(),
+                                           frame1->get_Tcw());
+    cv::Mat proj2 = Geometry::get_proj_mat(cam_intrinsic_mat, frame2->get_Rcw(),
+                                           frame2->get_Tcw());
     for (auto& match : matches) {
         img_pt1.push_back(frame1->kpts[match.queryIdx].pt);
         img_pt2.push_back(frame2->kpts[match.trainIdx].pt);
