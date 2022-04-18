@@ -31,14 +31,44 @@ struct FrameMessage {
 class Map;
 class LocalMap;
 
+class InvDepthFilter {
+public:
+    InvDepthFilter() : cnt_(0), mean_(1.0), var_(3), basic_var_(1), dir_() {}
+
+    void filter(const cv::Mat &o0_cw, const cv::Mat &o1_cw,
+                const cv::Mat &coord);
+    [[nodiscard]] double get_variance() const { return var_; }
+    [[nodiscard]] cv::Mat get_coord(const cv::Mat &o1,
+                                    const cv::Mat &Rcw) const {
+        return o1 + Rcw.t() * dir_ / mean_;
+    }
+    [[nodiscard]] int get_cnt() const { return cnt_; }
+    void set_information(const Camera &camera, const cv::Point2f pt,
+                         double basic_var) {
+        dir_ = cv::Mat::zeros(3, 1, CV_32F);
+        dir_.at<float>(0) = (pt.x - camera.cx()) / camera.fx();
+        dir_.at<float>(1) = (pt.y - camera.cy()) / camera.fy();
+        dir_.at<float>(2) = 1.0f;
+        dir_ /= cv::norm(dir_);
+        basic_var_ = basic_var;
+    }
+
+private:
+    int cnt_;
+    double mean_;
+    double var_;
+    double basic_var_;
+    cv::Mat dir_;
+};
+
 class LocalMap {
 public:
     LocalMap() = delete;
-    void insert_frame(const FrameMessage &message);
+    void insert_frame(const FrameMessage &message, bool is_triangulate);
+    void insert_keyframe(const vo_ptr<Frame> &keyframe);
     void clear() {
         keyframe_.reset();
         curframe_.reset();
-        points_seen_.clear();
     }
 
 private:
@@ -49,7 +79,7 @@ private:
     vo_ptr<Frame> keyframe_;
     vo_ptr<Frame> curframe_;
     const Camera camera_;
-    std::unordered_map<vo_ptr<MapPoint>, int> points_seen_;
+    std::vector<InvDepthFilter> filters_;
 
     friend class Map;
 };
@@ -113,11 +143,17 @@ public:
     void initialize(const vo_ptr<Frame> &keyframe,
                     const vo_ptr<Frame> &other_frame) {
         local_map_->clear();
-        m_frames.push_back(keyframe);
-        insert_key_frame(keyframe);
-        if (other_frame) { m_frames.push_back(other_frame); }
+        local_map_->insert_frame(
+                FrameMessage(keyframe, std::vector<cv::DMatch>(), true), false);
+        if (other_frame) {
+            local_map_->insert_frame(
+                    FrameMessage(other_frame, std::vector<cv::DMatch>(), false),
+                    false);
+        }
     }
-    void insert_frame(const FrameMessage &message);
+    void insert_frame(const FrameMessage &message) {
+        local_map_->insert_frame(message, true);
+    }
 
     std::mutex map_global_mutex;
 

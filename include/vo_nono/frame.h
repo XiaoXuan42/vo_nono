@@ -74,7 +74,7 @@ public:
         return m_index_to_mappt.size();
     }
     void set_map_pt(int i, const std::shared_ptr<MapPoint> &pt) {
-        assert(m_index_to_mappt.count(i) == 0);
+        //assert(m_index_to_mappt.count(i) == 0);
         m_index_to_mappt.insert({i, pt});
         m_mappt_to_index.insert({pt->get_id(), i});
     }
