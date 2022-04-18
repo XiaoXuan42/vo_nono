@@ -265,8 +265,6 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
         if (inliers[i] && !m_cur_frame->is_index_set(old_matches[i].trainIdx)) {
             cnt_inlier += 1;
-            auto p_point = ref_frame->get_map_pt(old_matches[i].queryIdx);
-            m_cur_frame->set_map_pt(old_matches[i].trainIdx, p_point);
         } else {
             inliers[i] = false;
         }
