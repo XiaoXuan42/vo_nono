@@ -56,6 +56,7 @@ void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
     cv::Mat init_rvec, init_tcw = tcw.clone();
     cv::Rodrigues(Rcw, init_rvec);
     int best_cnt_inliers = 0;
+    double best_proj_error = 0.0;
     cv::Mat best_rvec;
 
     for (auto& sel : rd_selects) {
@@ -74,6 +75,7 @@ void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
         cv::projectPoints(coords, cur_rvec, cur_tcw, camera.get_intrinsic_mat(),
                           std::vector<double>(), res_img_pts);
         int cnt_inlier = 0;
+        double proj_error = 0.0;
         std::vector<bool> cur_is_inlier(img_pts.size(), false);
         for (int i = 0; i < (int) img_pts.size(); ++i) {
             cv::Point2f diff_pt = img_pts[i] - res_img_pts[i];
@@ -81,12 +83,15 @@ void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
                 std::fabs(diff_pt.y) < proj_th) {
                 cnt_inlier += 1;
                 cur_is_inlier[i] = true;
+                proj_error += diff_pt.x * diff_pt.x + diff_pt.y * diff_pt.y;
             }
         }
-        if (cnt_inlier > best_cnt_inliers) {
+        if (cnt_inlier > best_cnt_inliers ||
+            (cnt_inlier == best_cnt_inliers && proj_error < best_proj_error)) {
             best_cnt_inliers = cnt_inlier;
             is_inlier = std::move(cur_is_inlier);
             best_rvec = cur_rvec;
+            best_proj_error = proj_error;
             tcw = cur_tcw;
         }
     }
@@ -126,10 +131,9 @@ void PnP::cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
     if (tcw.type() != CV_32F) { tcw.convertTo(tcw, CV_32F); }
 }
 
-void PnP::pnp_optimize_proj_err(const std::vector<cv::Matx31f>& coords,
-                                const std::vector<cv::Point2f>& img_pts,
-                                const Camera& camera, cv::Mat& Rcw,
-                                cv::Mat& tcw) {
+void PnP::cv_pnp_optimize(const std::vector<cv::Matx31f>& coords,
+                          const std::vector<cv::Point2f>& img_pts,
+                          const Camera& camera, cv::Mat& Rcw, cv::Mat& tcw) {
     cv::Mat rvec;
     cv::Rodrigues(Rcw, rvec);
     rvec.convertTo(rvec, CV_64F);

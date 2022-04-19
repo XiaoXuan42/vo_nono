@@ -21,7 +21,7 @@ public:
                               cv::Mat& Rcw, cv::Mat& tcw,
                               std::vector<bool>& is_inlier);
 
-    static void pnp_optimize_proj_err(const std::vector<cv::Matx31f>& coords,
+    static void cv_pnp_optimize(const std::vector<cv::Matx31f>& coords,
                                       const std::vector<cv::Point2f>& img_pts,
                                       const Camera& camera, cv::Mat& Rcw,
                                       cv::Mat& tcw);
