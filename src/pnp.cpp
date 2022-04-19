@@ -3,6 +3,7 @@
 #include <opencv2/calib3d.hpp>
 
 #include "vo_nono/optimize_graph.h"
+#include "vo_nono/util/constants.h"
 #include "vo_nono/util/rand.h"
 
 namespace vo_nono {
@@ -145,28 +146,47 @@ void PnP::cv_pnp_optimize(const std::vector<cv::Matx31f>& coords,
     tcw.convertTo(tcw, CV_32F);
 }
 
-void PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
-                          const std::vector<cv::Point2f>& img_pts,
-                          const Camera& camera, cv::Mat& Rcw, cv::Mat& tcw) {
+std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
+                                       const std::vector<cv::Point2f>& img_pts,
+                                       const Camera& camera, cv::Mat& Rcw,
+                                       cv::Mat& tcw) {
     std::vector<bool> is_inlier(coords.size(), true);
-    OptimizeGraph graph(camera);
-    graph.add_cam_pose(Rcw, tcw, false);
-    for (int j = 0; j < int(coords.size()); ++j) {
-        if (is_inlier[j]) {
-            graph.add_point(cv::Mat(coords[j]), true);
-            graph.add_edge(0, j, img_pts[j]);
+    for (int i = 0; i < 4; ++i) {
+        OptimizeGraph graph(camera);
+        graph.add_cam_pose(Rcw, tcw, false);
+        std::vector<int> point_id(coords.size());
+        for (int j = 0; j < int(coords.size()); ++j) {
+            if (is_inlier[j]) {
+                point_id[j] = graph.add_point(cv::Mat(coords[j]), true);
+                graph.add_edge(0, point_id[j], img_pts[j]);
+            }
         }
+        graph.set_loss_kernel(new ceres::HuberLoss(chi2_2_5));
+        graph.to_problem();
+        ceres::Solver::Options options;
+        options.minimizer_type = ceres::TRUST_REGION;
+        options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
+        options.use_nonmonotonic_steps = true;
+        options.linear_solver_type = ceres::DENSE_SCHUR;
+        options.max_num_iterations = 10;
+        graph.evaluate_solver(options);
+        graph.get_cam_pose(0, Rcw, tcw);
+
+        std::vector<bool> new_inliers = is_inlier;
+        int inlier_cnt = 0;
+        for (int j = 0; j < int(coords.size()); ++j) {
+            if (is_inlier[j]) {
+                double loss = graph.get_loss(0, point_id[j]);
+                if (loss > chi2_2_5) {
+                    new_inliers[j] = false;
+                } else {
+                    inlier_cnt += 1;
+                }
+            }
+        }
+
+        if (inlier_cnt > 10) { is_inlier = std::move(new_inliers); }
     }
-    graph.set_loss_kernel(new ceres::HuberLoss(1.0));
-    graph.to_problem();
-    ceres::Solver::Options options;
-    options.minimizer_type = ceres::TRUST_REGION;
-    options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
-    options.use_nonmonotonic_steps = true;
-    options.linear_solver_type = ceres::ITERATIVE_SCHUR;
-    options.min_linear_solver_iterations = 40;
-    options.max_linear_solver_iterations = 40;
-    graph.evaluate_solver(options);
-    graph.get_cam_pose(0, Rcw, tcw);
+    return is_inlier;
 }
 }// namespace vo_nono

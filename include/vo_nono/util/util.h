@@ -16,6 +16,16 @@ template<typename T, typename U>
     }
     return res;
 }
+template<typename T>
+[[nodiscard]] inline int cnt_inliers_from_mask(const std::vector<T> &mask) {
+    int cnt = 0;
+    for (int i = 0; i < (int) mask.size(); ++i) {
+        if (mask[i]) {
+            cnt += 1;
+        }
+    }
+    return cnt;
+}
 }// namespace vo_nono
 
 #endif

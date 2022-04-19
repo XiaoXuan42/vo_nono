@@ -280,7 +280,7 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             inlier_img_pts.push_back(img_pts[i]);
         }
     }
-    PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
+    PnP::cv_pnp_optimize(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
     m_cur_frame->set_Rcw(Rcw);
     m_cur_frame->set_Tcw(tcw);
     return cnt_inlier;
@@ -291,73 +291,55 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
     int cnt_proj_match = 0;
     std::unordered_set<vo_id_t> map_pt_set;
     std::vector<ProjMatch> proj_matches;
-    std::vector<cv::Matx31f> map_pt_coords, inlier_coords;
+    std::vector<cv::Matx31f> pt_coords, inlier_coords;
     std::vector<cv::Point2f> img_pts, inlier_img_pts;
-    std::vector<bool> is_inliers;
+    std::vector<int> inlier_proj_index;
+    std::vector<bool> is_inliers, is_inliers2;
     cv::Mat Rcw = m_cur_frame->get_Rcw(), tcw = m_cur_frame->get_Tcw();
     m_matcher->set_estimate_pose(Rcw, tcw);
 
     TIME_IT(proj_matches = m_matcher->match_by_projection(points, r_th),
             "projection match cost ");
+    if (proj_matches.size() < CNT_MIN_MATCHES) {
+        return int(proj_matches.size());
+    }
 
     for (auto &proj_match : proj_matches) {
-        map_pt_coords.push_back(proj_match.coord3d);
+        pt_coords.push_back(proj_match.coord3d);
         img_pts.push_back(proj_match.img_pt);
     }
-
-    if (map_pt_coords.size() < CNT_MIN_MATCHES) {
-        return int(map_pt_coords.size());
-    }
-
-    TIME_IT(PnP::pnp_ransac(map_pt_coords, img_pts, m_camera, 100, ransac_th,
+    TIME_IT(PnP::pnp_ransac(pt_coords, img_pts, m_camera, 100, ransac_th,
                             Rcw, tcw, is_inliers),
             "projection pnp cost ");
 
+    cnt_proj_match = cnt_inliers_from_mask(is_inliers);
     assert(proj_matches.size() == is_inliers.size());
-    for (int i = 0; i < int(is_inliers.size()); ++i) {
-        if (is_inliers[i]) { cnt_proj_match += 1; }
-    }
-
-    log_debug_line("Projection ransac with " << proj_matches.size()
-                                             << " points and " << cnt_proj_match
-                                             << " matches.");
-    /*
-
-    if (m_cur_frame->id >= 180) {
-        std::vector<cv::DMatch> dmatches;
-        dmatches.clear();
-        for (int i = 0; i < int(is_inliers.size()); ++i) {
-            if (is_inliers[i]) {
-                for (int j = 0; j < int(m_keyframe->kpts.size()); ++j) {
-                    if (m_keyframe->is_index_set(j) &&
-                        m_keyframe->get_map_pt(j)->get_id() ==
-                                proj_matches[i].p_map_pt->get_id()) {
-                        dmatches.emplace_back(
-                                cv::DMatch(j, proj_matches[i].index, 10));
-                    }
-                }
-            }
-        }
-        show_cur_frame_match(m_keyframe, dmatches, "Filtered projection ");
-    }
-*/
-
     if (cnt_proj_match < CNT_MIN_MATCHES) { return cnt_proj_match; }
     for (int i = 0; i < int(is_inliers.size()); ++i) {
         if (is_inliers[i] &&
             !m_cur_frame->is_index_set(proj_matches[i].index)) {
-            inlier_coords.push_back(map_pt_coords[i]);
+            inlier_coords.push_back(pt_coords[i]);
             inlier_img_pts.push_back(img_pts[i]);
-            m_cur_frame->set_map_pt(proj_matches[i].index,
-                                    proj_matches[i].p_map_pt);
+            inlier_proj_index.push_back(i);
         }
     }
-    PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, m_camera, Rcw, tcw);
+    is_inliers2 = PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, m_camera,
+                                       Rcw, tcw);
+
+    cnt_proj_match = 0;
+    for (int i = 0; i < int(is_inliers2.size()); ++i) {
+        if (is_inliers2[i]) {
+            int proj_index = inlier_proj_index[i];
+            m_cur_frame->set_map_pt(proj_matches[proj_index].index,
+                                    proj_matches[proj_index].p_map_pt);
+            cnt_proj_match += 1;
+        }
+    }
     m_cur_frame->set_Rcw(Rcw);
     m_cur_frame->set_Tcw(tcw);
-    log_debug_line("Pose estimate using "
-                   << is_inliers.size() << " projection with " << cnt_proj_match
-                   << " map points.");
+    log_debug_line("Pose estimate using " << is_inliers2.size()
+                                          << " projection with "
+                                          << cnt_proj_match << " map points.");
     return cnt_proj_match;
 }
 
