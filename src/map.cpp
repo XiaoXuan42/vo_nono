@@ -11,8 +11,8 @@
 #include "vo_nono/util/util.h"
 
 namespace vo_nono {
-void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &o1_cw,
-                            const cv::Mat &coord) {
+void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
+                            const cv::Mat &o1_cw, const cv::Mat &coord) {
     assert(coord.type() == CV_32F);
     cv::Mat t0 = coord + o0_cw;
     cv::Mat t1 = coord + o1_cw;
@@ -23,14 +23,13 @@ void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &o1_cw,
     double cur_var =
             t1_square / (t0_square * t0_square * (1.0 - cos2)) * basic_var_;
     double cur_d = 1.0 / std::sqrt(t0_square);
-    // if (cur_d < mean_ - 2 * var_ || cur_d > mean_ + 2 * var_) { return false; }
 
     double update_mean = (var_ * cur_d + cur_var * mean_) / (cur_var + var_);
     double update_var = (var_ * cur_var) / (cur_var + var_);
     mean_ = update_mean;
     var_ = update_var;
 
-    dir_ = (dir_ * float(cnt_) + t0 / cv::norm(t0)) / float(cnt_ + 1);
+    dir_ = (dir_ * float(cnt_) + Rcw0 * t0 / cv::norm(t0)) / float(cnt_ + 1);
     dir_ /= cv::norm(dir_);
     cnt_ += 1;
 }
@@ -68,17 +67,19 @@ void LocalMap::triangulate_with_keyframe(
             vo_ptr<MapPoint> target_pt;
 
             int keyframe_index = valid_match[i].queryIdx;
+            filters_[keyframe_index].filter(
+                    keyframe_->get_Tcw(), keyframe_->get_Rcw(),
+                    curframe_->get_Tcw(), tri_results[i]);
             if (keyframe_->is_index_set(keyframe_index)) {
                 target_pt = keyframe_->get_map_pt(keyframe_index);
+                target_pt->set_coord(filters_[keyframe_index].get_coord(
+                        keyframe_->get_Tcw(), keyframe_->get_Rcw()));
             } else {
-                filters_[keyframe_index].filter(keyframe_->get_Tcw(),
-                                                curframe_->get_Tcw(),
-                                                tri_results[i]);
-                if (filters_[keyframe_index].get_variance() < 0.0001) {
+                if (filters_[keyframe_index].get_variance() < 0.001) {
                     target_pt = std::make_shared<MapPoint>(
                             MapPoint::create_map_point(
                                     filters_[keyframe_index].get_coord(
-                                            -keyframe_->get_Tcw(),
+                                            keyframe_->get_Tcw(),
                                             keyframe_->get_Rcw()),
                                     keyframe_->descriptor.row(keyframe_index)));
                     keyframe_->set_map_pt(keyframe_index, target_pt);
@@ -98,7 +99,7 @@ void LocalMap::insert_keyframe(const vo_ptr<Frame> &keyframe) {
     filters_.clear();
     filters_.resize(keyframe->kpts.size());
     double basic_var = std::min(camera_.fx(), camera_.fy());
-    basic_var = 4.0 / (basic_var * basic_var);
+    basic_var = 1.0 / (basic_var * basic_var);
     for (size_t i = 0; i < keyframe->kpts.size(); ++i) {
         filters_[i].set_information(camera_, keyframe->kpts[i].pt, basic_var);
     }
