@@ -35,12 +35,12 @@ class InvDepthFilter {
 public:
     InvDepthFilter() : cnt_(0), mean_(1.0), var_(3), basic_var_(1), dir_() {}
 
-    void filter(const cv::Mat &o0_cw, const cv::Mat &o1_cw,
+    void filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0, const cv::Mat &o1_cw,
                 const cv::Mat &coord);
     [[nodiscard]] double get_variance() const { return var_; }
-    [[nodiscard]] cv::Mat get_coord(const cv::Mat &o1,
+    [[nodiscard]] cv::Mat get_coord(const cv::Mat &o_cw,
                                     const cv::Mat &Rcw) const {
-        return o1 + Rcw.t() * dir_ / mean_;
+        return -o_cw + Rcw.t() * dir_ / mean_;
     }
     [[nodiscard]] int get_cnt() const { return cnt_; }
     void set_information(const Camera &camera, const cv::Point2f pt,
