@@ -308,8 +308,8 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
         pt_coords.push_back(proj_match.coord3d);
         img_pts.push_back(proj_match.img_pt);
     }
-    TIME_IT(PnP::pnp_ransac(pt_coords, img_pts, m_camera, 100, ransac_th,
-                            Rcw, tcw, is_inliers),
+    TIME_IT(PnP::pnp_ransac(pt_coords, img_pts, m_camera, 100, ransac_th, Rcw,
+                            tcw, is_inliers),
             "projection pnp cost ");
 
     cnt_proj_match = cnt_inliers_from_mask(is_inliers);

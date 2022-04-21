@@ -10,7 +10,8 @@
 #include "vo_nono/camera.h"
 #include "vo_nono/motion.h"
 #include "vo_nono/optimize_graph.h"
-#include "vo_nono/util.h"
+#include "vo_nono/util/geometry.h"
+#include "vo_nono/util/histogram.h"
 #include "vo_nono/util/queue.h"
 
 cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
@@ -25,8 +26,8 @@ void test_quaternion() {
     cv::Mat rvec = cv::Mat({3.0f, 7.89f, -10.5f});
     cv::Rodrigues(rvec, rot);
     float q[4];
-    vo_nono::rotation_mat_to_quaternion(rot, q);
-    rc_rot = vo_nono::quaternion_to_rotation_mat(q);
+    vo_nono::Geometry::rotation_mat_to_quaternion(rot, q);
+    rc_rot = vo_nono::Geometry::quaternion_to_rotation_mat(q);
     std::cout << rot << std::endl << rc_rot;
 }
 
@@ -159,7 +160,7 @@ void test_bundle_adjustment() {
 
     std::vector<cv::Mat> points, noise_points;
     std::vector<cv::Point2f> proj[2];
-    constexpr int pt_cnt = 5;
+    constexpr int pt_cnt = 500;
     for (int i = 0; i < pt_cnt; ++i) {
         cv::Mat coord = (cv::Mat_<float>(3, 1) << i + 2, 4 * i + 3, 500);
         points.push_back(coord);
@@ -282,13 +283,13 @@ void test_consumer_blocking_queue() {
     std::thread consumer[10], producer[10];
     char slot[20] = "good morning!";
     for (int i = 0; i < 10; ++i) {
-        consumer[i] = std::thread([&, i=i] {
+        consumer[i] = std::thread([&, i = i] {
             slot[i + 10] = q.pop();
             if (slot[i + 10] == '(') { slot[i + 10] = ')'; }
         });
     }
     for (int i = 0; i < 10; ++i) {
-        producer[i] = std::thread([&, i=i] {
+        producer[i] = std::thread([&, i = i] {
             slot[i] = '(';
             q.push('(');
         });
@@ -301,26 +302,24 @@ void test_consumer_blocking_queue() {
     char slot2[20] = "good afternoon";
     for (int i = 0; i < 20; ++i) {
         if (i % 2 == 0) {
-            consumer[i] = std::thread([&, i=i] {
-                slot2[i/2+10] = q.pop();
-                if (slot2[i/2+10] == '(') { slot2[i/2+10] = ')'; }
+            consumer[i] = std::thread([&, i = i] {
+                slot2[i / 2 + 10] = q.pop();
+                if (slot2[i / 2 + 10] == '(') { slot2[i / 2 + 10] = ')'; }
             });
         } else {
-            consumer[i] = std::thread([&, i=i] {
-                slot2[i/2] = '(';
+            consumer[i] = std::thread([&, i = i] {
+                slot2[i / 2] = '(';
                 q.push('(');
             });
         }
     }
     for (int i = 0; i < 10; ++i) { consumer[i].join(); }
     for (int i = 0; i < 10; ++i) { producer[i].join(); }
-    for (int i = 0; i < 20; ++i) {
-        std::cout << slot2[i];
-    }
+    for (int i = 0; i < 20; ++i) { std::cout << slot2[i]; }
     std::cout << std::endl;
 }
 
 int main() {
-    test_consumer_blocking_queue();
+    test_bundle_adjustment();
     return 0;
 }

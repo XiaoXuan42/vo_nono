@@ -61,7 +61,7 @@ public:
           local_map_(new LocalMap(this)),
           mb_shutdown(false),
           mb_global_ba(false) {
-        //mt_global_ba = std::thread(&Map::global_bundle_adjustment, this);
+        mt_global_ba = std::thread(&Map::global_bundle_adjustment, this);
     }
     explicit Map(const Map &) = delete;
     ~Map() { shutdown(); }
