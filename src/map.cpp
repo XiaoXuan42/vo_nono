@@ -72,8 +72,6 @@ void LocalMap::triangulate_with_keyframe(
                     curframe_->get_Tcw(), tri_results[i]);
             if (keyframe_->is_index_set(keyframe_index)) {
                 target_pt = keyframe_->get_map_pt(keyframe_index);
-                target_pt->set_coord(filters_[keyframe_index].get_coord(
-                        keyframe_->get_Tcw(), keyframe_->get_Rcw()));
             } else {
                 if (filters_[keyframe_index].get_variance() < 0.001) {
                     target_pt = std::make_shared<MapPoint>(
