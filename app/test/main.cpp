@@ -319,7 +319,31 @@ void test_consumer_blocking_queue() {
     std::cout << std::endl;
 }
 
+void test_triangulation() {
+    cv::Mat K = cv::Mat::eye(3, 3, CV_32F);
+    cv::Mat R0 = cv::Mat::eye(3, 3, CV_32F), t0 = cv::Mat::zeros(3, 1, CV_32F);
+    cv::Mat R1 = cv::Mat::eye(3, 3, CV_32F), t1 = cv::Mat::zeros(3, 1, CV_32F);
+    t1.at<float>(0) = 1.0f;
+    cv::Mat pos = cv::Mat::zeros(4, 1, CV_32F);
+    pos.at<float>(0) = 1000;
+    pos.at<float>(1) = 2000;
+    pos.at<float>(2) = 1000;
+    pos.at<float>(3) = 1.0f;
+    cv::Mat proj0 = vo_nono::Geometry::get_proj_mat(K, R0, t0);
+    cv::Mat proj1 = vo_nono::Geometry::get_proj_mat(K, R1, t1);
+    cv::Mat img_pt0 = proj0 * pos, img_pt1 = proj1 * pos;
+    img_pt0 /= img_pt0.at<float>(2);
+    img_pt1 /= img_pt1.at<float>(2);
+    cv::Point2f pt0(img_pt0.at<float>(0), img_pt0.at<float>(1)), pt1(img_pt1.at<float>(0), img_pt1.at<float>(1));
+    std::vector<cv::Point2f> vec_pt0, vec_pt1;
+    vec_pt0.push_back(pt0);
+    vec_pt1.push_back(pt1);
+    cv::Mat tri_res;
+    cv::triangulatePoints(proj0, proj1, vec_pt0, vec_pt1, tri_res);
+    std::cout << tri_res / tri_res.at<float>(3) << std::endl;
+}
+
 int main() {
-    test_bundle_adjustment();
+    test_triangulation();
     return 0;
 }

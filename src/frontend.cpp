@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <opencv2/calib3d.hpp>
+#include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -29,9 +32,44 @@ namespace {
     cv::waitKey(0);
 }
 
+[[maybe_unused]] void show_matches(const vo_ptr<Frame> &frame1,
+                                   const vo_ptr<Frame> &frame2,
+                                   const std::vector<cv::DMatch> &matches) {
+    std::string title =
+            std::to_string(frame1->id) + " match " + std::to_string(frame2->id);
+    cv::Mat outimg;
+    cv::drawMatches(frame1->image, frame1->kpts, frame2->image, frame2->kpts,
+                    matches, outimg);
+    cv::imshow(title, outimg);
+    cv::waitKey(0);
+}
+
 [[maybe_unused]] void show_image(const cv::Mat &image,
                                  const std::string &title) {
     cv::imshow(title, image);
+    cv::waitKey(0);
+}
+
+[[maybe_unused]] void show_coordinate(const vo_ptr<Frame> &frame) {
+    cv::Mat img = frame->image.clone();
+    cv::cvtColor(img, img, cv::COLOR_GRAY2RGB);
+    int cnt = 0;
+    for (int i = 0; i < int(frame->kpts.size()); ++i) {
+        auto pt = frame->kpts[i].pt;
+        if (frame->is_index_set(i)) {
+            cnt += 1;
+            if (cnt > 10) { break; }
+            cv::Mat coord = frame->get_map_pt(i)->get_coord();
+            std::string annotate = "(" + std::to_string(coord.at<float>(0)) +
+                                   ", " + std::to_string(coord.at<float>(1)) +
+                                   ", " + std::to_string(coord.at<float>(2)) +
+                                   ")";
+            cv::circle(img, pt, 5, CV_RGB(0.0, 0.0, 255.0));
+            cv::putText(img, annotate, pt, cv::FONT_HERSHEY_PLAIN, 1,
+                        CV_RGB(255.0, 0.0, 0.0));
+        }
+    }
+    cv::imshow("frame " + std::to_string(frame->id), img);
     cv::waitKey(0);
 }
 }// namespace
@@ -265,8 +303,6 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
         if (inliers[i] && !m_cur_frame->is_index_set(old_matches[i].trainIdx)) {
             cnt_inlier += 1;
-            auto p_point = ref_frame->get_map_pt(old_matches[i].queryIdx);
-            m_cur_frame->set_map_pt(old_matches[i].trainIdx, p_point);
         } else {
             inliers[i] = false;
         }
