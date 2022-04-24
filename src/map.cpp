@@ -24,10 +24,13 @@ void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
             t1_square / (t0_square * t0_square * (1.0 - cos2)) * basic_var_;
     double cur_d = 1.0 / std::sqrt(t0_square);
 
+    if (cnt_ >= 3 && std::abs(cur_d - mean_) > 2 * sqrt_var_) { return; }
+
     double update_mean = (var_ * cur_d + cur_var * mean_) / (cur_var + var_);
     double update_var = (var_ * cur_var) / (cur_var + var_);
     mean_ = update_mean;
     var_ = update_var;
+    sqrt_var_ = std::sqrt(var_);
 
     dir_ = (dir_ * float(cnt_) + Rcw0 * t0 / cv::norm(t0)) / float(cnt_ + 1);
     dir_ /= cv::norm(dir_);
@@ -35,8 +38,8 @@ void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
 }
 
 LocalMap::LocalMap(Map *map) : map_(map), camera_(map->mr_camera) {}
-void LocalMap::triangulate_with_keyframe(
-        const std::vector<cv::DMatch> &matches) {
+void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
+                                         double th) {
     std::vector<cv::DMatch> valid_match;
     std::vector<bool> mask;
     std::vector<cv::Point2f> pts1, pts2;
@@ -63,7 +66,8 @@ void LocalMap::triangulate_with_keyframe(
     int cnt_new_tri = 0;
     for (int i = 0; i < int(tri_inliers.size()); ++i) {
         if (tri_inliers[i] &&
-            !curframe_->is_index_set(valid_match[i].trainIdx)) {
+            !curframe_->is_index_set(valid_match[i].trainIdx) &&
+            own_point_[valid_match[i].queryIdx]) {
             vo_ptr<MapPoint> target_pt;
 
             int keyframe_index = valid_match[i].queryIdx;
@@ -72,8 +76,10 @@ void LocalMap::triangulate_with_keyframe(
                     curframe_->get_Tcw(), tri_results[i]);
             if (keyframe_->is_index_set(keyframe_index)) {
                 target_pt = keyframe_->get_map_pt(keyframe_index);
+                target_pt->set_coord(filters_[keyframe_index].get_coord(
+                        keyframe_->get_Tcw(), keyframe_->get_Rcw()));
             } else {
-                if (filters_[keyframe_index].get_variance() < 0.001) {
+                if (filters_[keyframe_index].relative_error_less(th)) {
                     target_pt = std::make_shared<MapPoint>(
                             MapPoint::create_map_point(
                                     filters_[keyframe_index].get_coord(
@@ -93,29 +99,34 @@ void LocalMap::triangulate_with_keyframe(
     log_debug_line("Triangulated " << cnt_new_tri << " new points.");
 }
 
-void LocalMap::insert_keyframe(const vo_ptr<Frame> &keyframe) {
+void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
     filters_.clear();
     filters_.resize(keyframe->kpts.size());
+    own_point_ = std::vector(keyframe->kpts.size(), false);
     double basic_var = std::min(camera_.fx(), camera_.fy());
     basic_var = 1.0 / (basic_var * basic_var);
     for (size_t i = 0; i < keyframe->kpts.size(); ++i) {
-        filters_[i].set_information(camera_, keyframe->kpts[i].pt, basic_var);
+        if (!keyframe->is_index_set(int(i))) {
+            own_point_[i] = true;
+            filters_[i].set_information(camera_, keyframe->kpts[i].pt,
+                                        basic_var);
+        }
     }
-    map_->insert_key_frame(keyframe);
+    keyframe_ = keyframe;
 }
 
-void LocalMap::insert_frame(const FrameMessage &message, bool is_triangulate) {
-    if (map_->m_keyframes.empty()) {
-        if (message.is_keyframe) { insert_keyframe(message.frame); }
-        return;
-    }
-    keyframe_ = map_->m_keyframes.back();
+void LocalMap::insert_frame(const FrameMessage &message) {
+    assert(map_->m_keyframes.back() == keyframe_);
     curframe_ = message.frame;
-    if (is_triangulate) {
-        triangulate_with_keyframe(message.match_with_keyframe);
-    }
-    map_->m_frames.push_back(message.frame);
-    if (message.is_keyframe) { insert_keyframe(message.frame); }
+    triangulate_with_keyframe(message.match_with_keyframe, 0.1);
+}
+
+void LocalMap::initialize(const vo_ptr<Frame> &keyframe,
+                          const vo_ptr<Frame> &frame,
+                          const std::vector<cv::DMatch> &matches) {
+    set_keyframe(keyframe);
+    curframe_ = frame;
+    triangulate_with_keyframe(matches, std::numeric_limits<double>::infinity());
 }
 
 void Map::global_bundle_adjustment() {

@@ -124,7 +124,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         int init_state = initialize(image);
         if (init_state == 0) {
             m_state = State::Tracking;
-            m_map->initialize(m_keyframe, m_cur_frame);
+            m_map->initialize(m_keyframe, m_cur_frame, m_keyframe_matches);
             b_succ = true;
         } else if (init_state == -1) {
             // not enough matches
@@ -154,13 +154,12 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 }
 
 int Frontend::initialize(const cv::Mat &image) {
-    std::vector<cv::DMatch> matches;
-    matches = m_matcher->match_descriptor_bf(m_keyframe->descriptor, 8, 15,
-                                             CNT_INIT_MATCHES);
+    m_keyframe_matches = m_matcher->match_descriptor_bf(
+            m_keyframe->descriptor, 8, 15, CNT_INIT_MATCHES);
 
-    if (matches.size() < 10) { return -1; }
+    if (m_keyframe_matches.size() < 10) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
-    for (auto &match : matches) {
+    for (auto &match : m_keyframe_matches) {
         matched_pt1.push_back(m_keyframe->kpts[match.queryIdx].pt);
         matched_pt2.push_back(m_cur_frame->kpts[match.trainIdx].pt);
     }
@@ -171,11 +170,11 @@ int Frontend::initialize(const cv::Mat &image) {
                                        0.999, 1.0, 1000, mask),
             "Find essential mat cost ");
     // filter outliers
-    matches = filter_by_mask(matches, mask);
-    if (matches.size() < 50) { return -1; }
+    m_keyframe_matches = filter_by_mask(m_keyframe_matches, mask);
+    if (m_keyframe_matches.size() < 50) { return -1; }
     matched_pt1.clear();
     matched_pt2.clear();
-    for (auto &match : matches) {
+    for (auto &match : m_keyframe_matches) {
         matched_pt1.push_back(m_keyframe->kpts[match.queryIdx].pt);
         matched_pt2.push_back(m_cur_frame->kpts[match.trainIdx].pt);
     }
@@ -193,7 +192,7 @@ int Frontend::initialize(const cv::Mat &image) {
     std::vector<bool> inliers;
     int cnt_new_pt = Triangulator::triangulate_and_filter_frames(
             m_keyframe.get(), m_cur_frame.get(), m_camera.get_intrinsic_mat(),
-            matches, triangulate_result, inliers, 1000);
+            m_keyframe_matches, triangulate_result, inliers, 1000);
     if (cnt_new_pt < 40) { return -2; }
 
     double scale = 3;
@@ -207,18 +206,9 @@ int Frontend::initialize(const cv::Mat &image) {
     tcw /= scale;
     m_cur_frame->set_Tcw(tcw);
 
-    for (auto &tri_pt : triangulate_result) { tri_pt /= scale; }
-
-    assert(triangulate_result.size() == matches.size());
-    for (int i = 0; i < int(triangulate_result.size()); ++i) {
-        if (inliers[i]) {
-            auto new_pt = std::make_shared<MapPoint>(MapPoint::create_map_point(
-                    triangulate_result[i],
-                    m_keyframe->descriptor.row(matches[i].queryIdx)));
-            m_keyframe->set_map_pt(matches[i].queryIdx, new_pt);
-            m_cur_frame->set_map_pt(matches[i].trainIdx, new_pt);
-        }
-    }
+    // triangulated points is not scaled because it's no longer needed.
+    assert(m_keyframe_matches.size() == inliers.size());
+    m_keyframe_matches = filter_by_mask(m_keyframe_matches, inliers);
 
     log_debug_line("Initialize with R: " << std::endl
                                          << Rcw << std::endl
