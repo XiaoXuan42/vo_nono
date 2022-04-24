@@ -2,6 +2,6 @@
 
 namespace vo_nono {
 void System::get_image(const cv::Mat &image, double t) {
-    m_frontend.get_image(image, t);
+    frontend_.get_image(image, t);
 }
 }// namespace vo_nono

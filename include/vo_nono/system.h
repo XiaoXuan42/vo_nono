@@ -16,22 +16,22 @@ struct SystemConfig {
 class System {
 public:
     explicit System(const SystemConfig& config)
-        : m_config(config),
-          m_camera(config.camera),
-          m_map(std::make_shared<Map>(m_camera)),
-          m_frontend(config.frontend_config, m_camera, m_map) {}
+        : config_(config),
+          camera_(config.camera),
+          map_(std::make_shared<Map>(camera_)),
+          frontend_(config.frontend_config, camera_, map_) {}
 
     void get_image(const cv::Mat& image, double t);
 
     [[nodiscard]] Map::Trajectory get_trajectory() const {
-        return m_map->get_trajectory();
+        return map_->get_trajectory();
     }
 
 private:
-    SystemConfig m_config;
-    Camera m_camera;
-    vo_ptr<Map> m_map;
-    Frontend m_frontend;
+    SystemConfig config_;
+    Camera camera_;
+    vo_ptr<Map> map_;
+    Frontend frontend_;
 };
 }// namespace vo_nono
 

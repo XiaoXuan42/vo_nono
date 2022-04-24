@@ -6,20 +6,20 @@ template<typename T>
 class Histogram {
 public:
     Histogram(int N, std::function<int(T)> indexer)
-            : m_indexer(indexer),
-              m_boxes(N, 0),
-              m_topK(0) {}
+        : indexer_(indexer),
+          boxes_(N, 0),
+          topK_(0) {}
 
     void insert_element(T val) {
-        int index = m_indexer(val);
-        assert(index >= 0 && index < (int) m_boxes.size());
-        m_boxes[index] += 1;
+        int index = indexer_(val);
+        assert(index >= 0 && index < (int) boxes_.size());
+        boxes_[index] += 1;
     }
 
     void cal_topK(int k) {
-        m_topK = -1;
+        topK_ = -1;
         std::vector<int> buffer(k, -1);
-        for (auto val : m_boxes) {
+        for (auto val : boxes_) {
             if (val > buffer[k - 1]) { buffer[k - 1] = val; }
             int cur = k - 1;
             while (cur > 0) {
@@ -33,20 +33,20 @@ public:
                 }
             }
         }
-        m_topK = buffer[k - 1];
+        topK_ = buffer[k - 1];
     }
 
     bool is_topK(T val) const {
-        int index = m_indexer(val);
-        assert(index >= 0 && index < (int) m_boxes.size());
-        return m_boxes[index] >= m_topK;
+        int index = indexer_(val);
+        assert(index >= 0 && index < (int) boxes_.size());
+        return boxes_[index] >= topK_;
     }
 
 private:
-    std::function<int(T)> m_indexer;
-    std::vector<int> m_boxes;
-    int m_topK;
+    std::function<int(T)> indexer_;
+    std::vector<int> boxes_;
+    int topK_;
 };
 
-}
+}// namespace vo_nono
 #endif//VO_NONO_HISTOGRAM_H

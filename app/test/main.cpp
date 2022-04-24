@@ -93,7 +93,7 @@ void test_init() {
     }
     cv::recoverPose(Ess, img_points1, img_points2, R, t);
     std::cout << "R:\n" << R << std::endl;
-    std::cout << "m_t:\n" << t << std::endl;
+    std::cout << "t_:\n" << t << std::endl;
     cv::Mat proj2_es = get_proj(R, t);
 
     cv::Mat tri_res;

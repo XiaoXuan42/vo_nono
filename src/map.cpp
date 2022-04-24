@@ -37,7 +37,7 @@ void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
     cnt_ += 1;
 }
 
-LocalMap::LocalMap(Map *map) : map_(map), camera_(map->mr_camera) {}
+LocalMap::LocalMap(Map *map) : map_(map), camera_(map->camera_) {}
 void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
                                          double th) {
     std::vector<cv::DMatch> valid_match;
@@ -116,7 +116,7 @@ void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
 }
 
 void LocalMap::insert_frame(const FrameMessage &message) {
-    assert(map_->m_keyframes.back() == keyframe_);
+    assert(map_->keyframes_.back() == keyframe_);
     curframe_ = message.frame;
     triangulate_with_keyframe(message.match_with_keyframe, 0.1);
 }
@@ -132,24 +132,24 @@ void LocalMap::initialize(const vo_ptr<Frame> &keyframe,
 void Map::global_bundle_adjustment() {
     std::unique_lock<std::mutex> glb_lock(map_global_mutex);
     while (true) {
-        if (mb_shutdown) { break; }
-        m_global_ba_cv.wait(glb_lock, [&] { return mb_global_ba; });
-        if (mb_shutdown) { break; }
-        mb_global_ba = false;
-        //if (m_keyframes.size() < 5) { continue; }
+        if (b_shutdown_) { break; }
+        cv_global_ba_.wait(glb_lock, [&] { return b_global_ba_; });
+        if (b_shutdown_) { break; }
+        b_global_ba_ = false;
+        //if (keyframes_.size() < 5) { continue; }
 
         _global_bundle_adjustment(glb_lock);
     }
 }
 
 void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
-    if (m_keyframes.size() < 2) { return; }
+    if (keyframes_.size() < 2) { return; }
 
     std::unordered_map<int, vo_ptr<Frame>> id_to_frame;
     std::unordered_map<vo_ptr<MapPoint>, int> point_to_id;
-    OptimizeGraph graph(mr_camera);
+    OptimizeGraph graph(camera_);
     int active_frames = 0;
-    for (auto iter = m_keyframes.rbegin(); iter != m_keyframes.rend(); ++iter) {
+    for (auto iter = keyframes_.rbegin(); iter != keyframes_.rend(); ++iter) {
         vo_ptr<Frame> cur_frame = *iter;
         if (active_frames < 5) {
             int cam_id = graph.add_cam_pose(cur_frame->get_Rcw(),

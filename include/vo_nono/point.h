@@ -14,39 +14,38 @@ public:
                                      const cv::Mat& desc);
     static MapPoint create_map_point(const cv::Mat& coord, const cv::Mat& desc);
 
-    [[nodiscard]] vo_id_t get_id() const { return m_id; }
+    [[nodiscard]] vo_id_t get_id() const { return id_; }
 
     [[nodiscard]] cv::Mat get_coord() const {
-        assert(m_coord.type() == CV_32F);
-        assert(m_coord.cols == 1);
-        assert(m_coord.rows == 3);
-        return m_coord;
+        assert(coord_.type() == CV_32F);
+        assert(coord_.cols == 1);
+        assert(coord_.rows == 3);
+        return coord_;
     }
 
     void set_coord(const cv::Mat& coord) {
         assert(coord.type() == CV_32F);
         assert(coord.cols == 1);
         assert(coord.rows == 3);
-        m_coord = coord;
+        coord_ = coord;
     }
 
-    [[nodiscard]] const cv::Mat& get_desc() const { return m_desc; }
+    [[nodiscard]] const cv::Mat& get_desc() const { return desc_; }
 
 private:
     static vo_id_t map_point_id_cnt;
     MapPoint(vo_id_t id, float x, float y, float z, cv::Mat desc)
-        : m_id(id),
-          m_desc(std::move(desc)) {
-        m_coord = cv::Mat(3, 1, CV_32F);
-        m_coord.at<float>(0, 0) = x;
-        m_coord.at<float>(1, 0) = y;
-        m_coord.at<float>(2, 0) = z;
+        : id_(id),
+          desc_(std::move(desc)) {
+        coord_ = cv::Mat(3, 1, CV_32F);
+        coord_.at<float>(0, 0) = x;
+        coord_.at<float>(1, 0) = y;
+        coord_.at<float>(2, 0) = z;
     }
 
-    vo_id_t m_id;
-    cv::Mat m_coord;
-    cv::Mat m_desc;
-    std::vector<std::weak_ptr<Frame>> m_visible_frames;
+    vo_id_t id_;
+    cv::Mat coord_;
+    cv::Mat desc_;
 };
 }// namespace vo_nono
 

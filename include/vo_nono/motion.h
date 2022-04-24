@@ -6,18 +6,21 @@
 namespace vo_nono {
 class MotionPredictor {
 public:
-    MotionPredictor() { m_cur = 0; m_inform_cnt = 0; }
+    MotionPredictor() {
+        cur_ = 0;
+        inform_cnt_ = 0;
+    }
     void predict_pose(double time, cv::Mat& Rcw, cv::Mat& tcw) const;
     void inform_pose(const cv::Mat& new_Rcw, const cv::Mat& new_tcw,
                      double time);
-    [[nodiscard]] bool is_available() const { return m_inform_cnt >= 2; }
+    [[nodiscard]] bool is_available() const { return inform_cnt_ >= 2; }
 
 private:
-    cv::Mat m_t[2];
-    float m_q[2][4]{};
-    double m_time[2]{};
-    int m_cur;
-    int m_inform_cnt;
+    cv::Mat t_[2];
+    float q_[2][4]{};
+    double time_[2]{};
+    int cur_;
+    int inform_cnt_;
 };
 }// namespace vo_nono
 

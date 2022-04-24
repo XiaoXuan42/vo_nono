@@ -97,11 +97,11 @@ private:
 class Map {
 public:
     explicit Map(Camera camera)
-        : mr_camera(std::move(camera)),
+        : camera_(std::move(camera)),
           local_map_(new LocalMap(this)),
-          mb_shutdown(false),
-          mb_global_ba(false) {
-        mt_global_ba = std::thread(&Map::global_bundle_adjustment, this);
+          b_shutdown_(false),
+          b_global_ba_(false) {
+        t_global_ba_ = std::thread(&Map::global_bundle_adjustment, this);
     }
     explicit Map(const Map &) = delete;
     ~Map() { shutdown(); }
@@ -112,8 +112,8 @@ public:
 
     [[nodiscard]] Trajectory get_trajectory() {
         Trajectory trajectory;
-        trajectory.reserve(m_frames.size());
-        for (const vo_ptr<Frame> &frame : m_frames) {
+        trajectory.reserve(frames_.size());
+        for (const vo_ptr<Frame> &frame : frames_) {
             trajectory.emplace_back(
                     std::make_pair(frame->time, frame->get_pose()));
         }
@@ -124,7 +124,7 @@ public:
         std::unordered_set<vo_id_t> id_book;
         std::vector<vo_ptr<MapPoint>> result;
         int cnt = 0;
-        for (auto iter = m_keyframes.rbegin(); iter != m_keyframes.rend();
+        for (auto iter = keyframes_.rbegin(); iter != keyframes_.rend();
              ++iter) {
             std::vector<vo_ptr<MapPoint>> frame_pts =
                     (*iter)->get_all_map_pts();
@@ -143,23 +143,23 @@ public:
     void shutdown() {
         {
             std::unique_lock<std::mutex> lock(map_global_mutex);
-            mb_global_ba = true;
-            mb_shutdown = true;
-            m_global_ba_cv.notify_all();
+            b_global_ba_ = true;
+            b_shutdown_ = true;
+            cv_global_ba_.notify_all();
         }
-        if (mt_global_ba.joinable()) { mt_global_ba.join(); }
+        if (t_global_ba_.joinable()) { t_global_ba_.join(); }
     }
 
     void initialize(const vo_ptr<Frame> &keyframe, const vo_ptr<Frame> &frame,
                     const std::vector<cv::DMatch> &matches) {
-        m_frames.push_back(keyframe);
-        m_frames.push_back(frame);
+        frames_.push_back(keyframe);
+        frames_.push_back(frame);
         insert_key_frame(keyframe);
         local_map_->initialize(keyframe, frame, matches);
     }
 
     void insert_frame(const FrameMessage &message) {
-        m_frames.push_back(message.frame);
+        frames_.push_back(message.frame);
         local_map_->insert_frame(message);
         if (message.is_keyframe) {
             local_map_->set_keyframe(message.frame);
@@ -172,25 +172,24 @@ public:
 private:
     void insert_key_frame(const vo_ptr<Frame> &frame) {
         log_debug_line("Switch keyframe: " << frame->id);
-        m_keyframes.push_back(frame);
-        mb_global_ba = true;
-        m_global_ba_cv.notify_all();
+        keyframes_.push_back(frame);
+        b_global_ba_ = true;
+        cv_global_ba_.notify_all();
     }
 
     void _global_bundle_adjustment(std::unique_lock<std::mutex> &lock);
 
-    const Camera mr_camera;
+    const Camera camera_;
     vo_uptr<LocalMap> local_map_;
-    std::vector<vo_ptr<Frame>> m_keyframes;
-    std::vector<vo_ptr<Frame>> m_frames;
-    std::unordered_map<vo_id_t, vo_ptr<MapPoint>> m_id_to_map_pt;
+    std::vector<vo_ptr<Frame>> keyframes_;
+    std::vector<vo_ptr<Frame>> frames_;
 
 
-    std::condition_variable m_global_ba_cv;
+    std::condition_variable cv_global_ba_;
 
-    bool mb_shutdown;
-    bool mb_global_ba;
-    std::thread mt_global_ba;
+    bool b_shutdown_;
+    bool b_global_ba_;
+    std::thread t_global_ba_;
 
     friend class LocalMap;
 };

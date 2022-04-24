@@ -13,27 +13,27 @@ void MotionPredictor::inform_pose(const cv::Mat& new_Rcw,
     assert(new_Rcw.type() == CV_32F);
     assert(new_Rcw.cols == 3);
     assert(new_Rcw.rows == 3);
-    m_t[m_cur] = new_tcw.clone();
-    Geometry::rotation_mat_to_quaternion<float>(new_Rcw, m_q[m_cur]);
-    m_time[m_cur] = time;
-    m_cur ^= 1;
-    m_inform_cnt += 1;
+    t_[cur_] = new_tcw.clone();
+    Geometry::rotation_mat_to_quaternion<float>(new_Rcw, q_[cur_]);
+    time_[cur_] = time;
+    cur_ ^= 1;
+    inform_cnt_ += 1;
 }
 
 void MotionPredictor::predict_pose(double time, cv::Mat& Rcw,
                                    cv::Mat& tcw) const {
     // linear velocity
     assert(is_available());
-    const int other = m_cur;
-    const int cur = m_cur ^ 1;
-    double c1 = time - m_time[other];
-    double c2 = m_time[cur] - time;
-    double invDiv = 1.0 / (m_time[cur] - m_time[other]);
-    tcw = ((float) c1 * m_t[cur] + (float) c2 * m_t[other]) * invDiv;
+    const int other = cur_;
+    const int cur = cur_ ^ 1;
+    double c1 = time - time_[other];
+    double c2 = time_[cur] - time;
+    double invDiv = 1.0 / (time_[cur] - time_[other]);
+    tcw = ((float) c1 * t_[cur] + (float) c2 * t_[other]) * invDiv;
 
     // slerp
     float q[4];
-    const float *q1 = m_q[other], *q2 = m_q[cur];
+    const float *q1 = q_[other], *q2 = q_[cur];
     double ang = acos((double) (q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] +
                                 q1[3] * q2[3]));
     if (ang < 0.001) {
@@ -41,7 +41,7 @@ void MotionPredictor::predict_pose(double time, cv::Mat& Rcw,
             q[i] = q2[i] * (float) c1 + q1[i] * (float) c2;
         }
     } else {
-        double scaledT = c1 / (m_time[cur] - m_time[other]);
+        double scaledT = c1 / (time_[cur] - time_[other]);
         double c3 = sin((1 - scaledT) * ang), c4 = sin(scaledT * ang);
         for (int i = 0; i < 4; ++i) {
             q[i] = q2[i] * (float) c4 + q1[i] * (float) c3;

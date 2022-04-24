@@ -32,25 +32,25 @@ public:
                                    std::vector<cv::KeyPoint> &kpts,
                                    cv::Mat &dscpts, int nfeatures);
 
-    [[nodiscard]] State get_state() const { return m_state; }
+    [[nodiscard]] State get_state() const { return state_; }
 
     explicit Frontend(const FrontendConfig &config, const Camera &camera,
                       vo_ptr<Map> p_map = vo_ptr<Map>())
-        : m_config(config),
-          m_camera(camera),
-          m_state(State::Start),
-          m_map(std::move(p_map)),
-          mb_new_key_frame(false) {
+        : config_(config),
+          camera_(camera),
+          state_(State::Start),
+          map_(std::move(p_map)),
+          b_new_keyframe_(false) {
         log_debug_line("Frontend camera intrinsic matrix:\n"
-                       << m_camera.get_intrinsic_mat());
+                       << camera_.get_intrinsic_mat());
     }
 
 private:
     void reset_state() {
-        mb_new_key_frame = false;
-        mb_match_good = false;
-        mb_track_good = false;
-        m_keyframe_matches.clear();
+        b_new_keyframe_ = false;
+        b_match_good_ = false;
+        b_track_good_ = false;
+        keyframe_matches_.clear();
     }
 
     std::vector<cv::DMatch> match_frame(const vo_ptr<Frame> &ref_frame,
@@ -74,25 +74,24 @@ private:
                                       const std::vector<cv::DMatch> &matches,
                                       const std::string &prefix) const;
 
-    FrontendConfig m_config;
-    const Camera &m_camera;
-    State m_state;
+    FrontendConfig config_;
+    const Camera &camera_;
+    State state_;
 
-    vo_ptr<Frame> m_keyframe;
-    vo_ptr<Frame> m_cur_frame;
-    vo_ptr<Frame> m_prev_frame;
-    vo_uptr<ORBMatcher> m_matcher;
+    vo_ptr<Frame> keyframe_;
+    vo_ptr<Frame> curframe_;
+    vo_uptr<ORBMatcher> matcher_;
 
-    std::vector<cv::DMatch> m_keyframe_matches;
-    std::unordered_map<vo_ptr<MapPoint>, int> m_points_seen;
+    std::vector<cv::DMatch> keyframe_matches_;
+    std::unordered_map<vo_ptr<MapPoint>, int> points_seen_;
 
-    vo_ptr<Map> m_map;
+    vo_ptr<Map> map_;
 
-    MotionPredictor m_motion_pred;
-    bool mb_new_key_frame;
+    MotionPredictor motion_pred_;
+    bool b_new_keyframe_;
 
-    bool mb_track_good;
-    bool mb_match_good;
+    bool b_track_good_;
+    bool b_match_good_;
 };
 }// namespace vo_nono
 
