@@ -21,16 +21,6 @@ cv::Mat get_proj(const cv::Mat &Rcw, const cv::Mat &tcw) {
     return proj;
 }
 
-void test_quaternion() {
-    cv::Mat rot, rc_rot;
-    cv::Mat rvec = cv::Mat({3.0f, 7.89f, -10.5f});
-    cv::Rodrigues(rvec, rot);
-    float q[4];
-    vo_nono::Geometry::rotation_mat_to_quaternion(rot, q);
-    rc_rot = vo_nono::Geometry::quaternion_to_rotation_mat(q);
-    std::cout << rot << std::endl << rc_rot;
-}
-
 void test_init() {
     srand(time(NULL));
 
@@ -344,6 +334,7 @@ void test_triangulation() {
 }
 
 int main() {
-    test_triangulation();
+//    test_triangulation();
+    test_motion();
     return 0;
 }

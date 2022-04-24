@@ -2,6 +2,8 @@
 #define VO_NONO_MOTION_H
 
 #include <opencv2/core.hpp>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 
 namespace vo_nono {
 class MotionPredictor {
@@ -16,8 +18,8 @@ public:
     [[nodiscard]] bool is_available() const { return inform_cnt_ >= 2; }
 
 private:
-    cv::Mat t_[2];
-    float q_[2][4]{};
+    Eigen::Vector3f t_[2];
+    Eigen::Quaternionf q_[2];
     double time_[2]{};
     int cur_;
     int inform_cnt_;
