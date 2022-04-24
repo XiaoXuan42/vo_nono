@@ -33,8 +33,7 @@ class LocalMap;
 
 class InvDepthFilter {
 public:
-    InvDepthFilter() : cnt_(0), mean_(1.0), var_(3), basic_var_(1), dir_() {}
-
+    InvDepthFilter() : dir_(cv::Mat::zeros(3, 1, CV_32F)) {}
     void filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0, const cv::Mat &o1_cw,
                 const cv::Mat &coord);
     [[nodiscard]] double get_variance() const { return var_; }
@@ -52,34 +51,45 @@ public:
         dir_ /= cv::norm(dir_);
         basic_var_ = basic_var;
     }
+    [[nodiscard]] bool relative_error_less(double th) const {
+        if (std::isinf(th)) {
+            return true;
+        } else if (mean_ - 2 * sqrt_var_ <= 0) {
+            return false;
+        }
+        double max_d = 1.0 / (mean_ - 2 * sqrt_var_);
+        double mean_d = 1.0 / mean_;
+        return (max_d - mean_d) <= th * mean_d;
+    }
 
 private:
-    int cnt_;
-    double mean_;
-    double var_;
-    double basic_var_;
+    int cnt_ = 0;
+    double mean_ = 1.0;
+    double var_ = 1.0;
+    double sqrt_var_ = 1.0;
+    double basic_var_ = 1;
     cv::Mat dir_;
 };
 
 class LocalMap {
 public:
     LocalMap() = delete;
-    void insert_frame(const FrameMessage &message, bool is_triangulate);
-    void insert_keyframe(const vo_ptr<Frame> &keyframe);
-    void clear() {
-        keyframe_.reset();
-        curframe_.reset();
-    }
+    void initialize(const vo_ptr<Frame> &keyframe, const vo_ptr<Frame> &frame,
+                    const std::vector<cv::DMatch> &matches);
+    void insert_frame(const FrameMessage &message);
+    void set_keyframe(const vo_ptr<Frame> &keyframe);
 
 private:
     explicit LocalMap(Map *map);
-    void triangulate_with_keyframe(const std::vector<cv::DMatch> &matches);
+    void triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
+                                   double th);
 
     Map *map_;
     vo_ptr<Frame> keyframe_;
     vo_ptr<Frame> curframe_;
     const Camera camera_;
     std::vector<InvDepthFilter> filters_;
+    std::vector<bool> own_point_;
 
     friend class Map;
 };
@@ -140,19 +150,21 @@ public:
         if (mt_global_ba.joinable()) { mt_global_ba.join(); }
     }
 
-    void initialize(const vo_ptr<Frame> &keyframe,
-                    const vo_ptr<Frame> &other_frame) {
-        local_map_->clear();
-        local_map_->insert_frame(
-                FrameMessage(keyframe, std::vector<cv::DMatch>(), true), false);
-        if (other_frame) {
-            local_map_->insert_frame(
-                    FrameMessage(other_frame, std::vector<cv::DMatch>(), false),
-                    false);
-        }
+    void initialize(const vo_ptr<Frame> &keyframe, const vo_ptr<Frame> &frame,
+                    const std::vector<cv::DMatch> &matches) {
+        m_frames.push_back(keyframe);
+        m_frames.push_back(frame);
+        insert_key_frame(keyframe);
+        local_map_->initialize(keyframe, frame, matches);
     }
+
     void insert_frame(const FrameMessage &message) {
-        local_map_->insert_frame(message, true);
+        m_frames.push_back(message.frame);
+        local_map_->insert_frame(message);
+        if (message.is_keyframe) {
+            local_map_->set_keyframe(message.frame);
+            insert_key_frame(message.frame);
+        }
     }
 
     std::mutex map_global_mutex;
