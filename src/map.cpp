@@ -85,7 +85,8 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
                                     filters_[keyframe_index].get_coord(
                                             keyframe_->get_Tcw(),
                                             keyframe_->get_Rcw()),
-                                    keyframe_->descriptor.row(keyframe_index)));
+                                    keyframe_->descriptor.row(keyframe_index),
+                                    keyframe_->kpts[keyframe_index].octave));
                     keyframe_->set_map_pt(keyframe_index, target_pt);
                     cnt_new_tri += 1;
                 }

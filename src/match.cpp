@@ -19,8 +19,8 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
     int proj_exceed = 0, in_image = 0, no_near = 0, collide = 0;
     cv::Mat proj_mat = Geometry::get_proj_mat(m_camera_intrinsic, m_Rcw, m_tcw);
     for (auto &map_pt : map_points) {
-        cv::Point2f proj_img_pt = Geometry::hm2d_to_euclid2d(
-                proj_mat * Geometry::euclid3d_to_hm3d(map_pt->get_coord()));
+        cv::Point2f proj_img_pt =
+                Geometry::project_euclid3d(proj_mat, map_pt->get_coord());
         auto coord = cv::Matx31f(map_pt->get_coord());
         if (proj_img_pt.x >= 0 && proj_img_pt.x < m_total_width &&
             proj_img_pt.y >= 0 && proj_img_pt.y < m_total_height) {
@@ -39,7 +39,14 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
             int best_dis = std::numeric_limits<int>::max();
             for (int i = min_height_id; i <= max_height_id; ++i) {
                 for (int j = min_width_id; j <= max_width_id; ++j) {
-                    for (auto &level_grid : m_pyramid_grids) {
+                    int min_pyramid_level =
+                            std::max(map_pt->get_pyramid_level() - 1, 0);
+                    int max_pyramid_level =
+                            std::min(map_pt->get_pyramid_level() + 1,
+                                     int(m_pyramid_grids.size()) - 1);
+                    for (int k = min_pyramid_level; k <= max_pyramid_level;
+                         ++k) {
+                        auto &level_grid = m_pyramid_grids[k];
                         for (auto index : level_grid.grid[i][j]) {
                             cv::KeyPoint kpt = kpts[index];
                             if (std::fabs(kpt.pt.x - proj_img_pt.x) > r_th ||
