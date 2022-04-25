@@ -178,7 +178,7 @@ std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
         for (int j = 0; j < int(coords.size()); ++j) {
             if (is_inlier[j]) {
                 double loss = graph.get_loss(0, point_id[j]);
-                if (loss * 2.0 > standard[i]) {
+                if (loss > standard[i]) {
                     new_inliers[j] = false;
                 } else {
                     inlier_cnt += 1;

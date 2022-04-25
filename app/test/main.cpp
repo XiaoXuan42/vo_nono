@@ -138,6 +138,28 @@ void test_histogram() {
     }
 }
 
+void test_optimize_graph() {
+    vo_nono::Camera camera(100, 100);
+    vo_nono::OptimizeGraph graph(camera);
+    Eigen::Matrix3f Rcw;
+    Rcw << 0, -1, 0, 1, 0, 0, 0, 0, 1;
+    Eigen::Vector3f tcw;
+    tcw << 0, 0, 0;
+    cv::Mat Rcw1, tcw1;
+    cv::eigen2cv(Rcw, Rcw1);
+    cv::eigen2cv(tcw, tcw1);
+    graph.add_cam_pose(Rcw1, tcw1, false);
+    Eigen::Vector3f coord(2, 2, 1);
+    cv::Mat coord1;
+    cv::eigen2cv(coord, coord1);
+    graph.add_point(coord1, true);
+    graph.add_edge(0, 0, cv::Point2f(-1, 1));
+    graph.add_edge(0, 0, cv::Point2f(-2, -1));
+    graph.to_problem();
+    graph.evaluate_residual();
+    std::cout << graph.get_loss(0, 0) << " " << graph.get_loss(0, 1);
+}
+
 void test_bundle_adjustment() {
     using namespace vo_nono;
     cv::Mat intrinsic_mat =
@@ -334,7 +356,6 @@ void test_triangulation() {
 }
 
 int main() {
-//    test_triangulation();
-    test_motion();
+    test_optimize_graph();
     return 0;
 }

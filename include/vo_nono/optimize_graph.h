@@ -71,8 +71,7 @@ public:
             const ceres::Solver::Options &options) {
         ceres::Solver::Summary summary;
         ceres::Solve(options, &problem, &summary);
-        auto eval_options = ceres::Problem::EvaluateOptions();
-        evaluate_residual(eval_options);
+        evaluate_residual();
         return summary;
     }
 
@@ -83,13 +82,20 @@ public:
         for (int i = 0; i < 3; ++i) { T.at<float>(i) = float(points[id][i]); }
     }
     void set_loss_kernel(ceres::LossFunction *l) { loss = l; }
-
-private:
-    void evaluate_residual(ceres::Problem::EvaluateOptions &option) {
+    void evaluate_residual() {
+        auto option = ceres::Problem::EvaluateOptions();
         option.residual_blocks = residual_ids;
-        problem.Evaluate(option, nullptr, &residual_vals, nullptr, nullptr);
+        std::vector<double> blk_residuals;
+        problem.Evaluate(option, nullptr, &blk_residuals, nullptr, nullptr);
+        assert(blk_residuals.size() == residual_ids.size() * 2);
+        residual_vals.resize(residual_ids.size());
+        for (int i = 0; i < int(blk_residuals.size()); i += 2) {
+            double d1 = blk_residuals[i], d2 = blk_residuals[i+1];
+            residual_vals[i/2] = d1 * d1 + d2 * d2;
+        }
     }
 
+private:
     struct Edge {
         int point_id;
         int residual_id;

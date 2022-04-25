@@ -211,7 +211,7 @@ double OptimizeGraph::get_loss(int cam_id, int point_id) {
         auto proj_err = ProjectionError(camera, img_x, img_y);
         double diff[2];
         proj_err(cam, pt, diff);
-        return 0.5 * (diff[0] * diff[0] + diff[1] * diff[1]);
+        return (diff[0] * diff[0] + diff[1] * diff[1]);
     } else {
         return residual_vals[edges[cam_id][point_id].residual_id];
     }
