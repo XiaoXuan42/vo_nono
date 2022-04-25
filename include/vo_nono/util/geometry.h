@@ -51,6 +51,16 @@ public:
         return hm2d_to_euclid2d(res);
     }
 
+    static double reprojection_err2(const cv::Mat &proj_mat,
+                                    const cv::Mat &coord,
+                                    const cv::Point2f &pixel) {
+        cv::Point2f projected_pixel =
+                hm2d_to_euclid2d(proj_mat * euclid3d_to_hm3d(coord));
+        auto dx = double(projected_pixel.x - pixel.x);
+        auto dy = double(projected_pixel.y - pixel.y);
+        return dx * dx + dy * dy;
+    }
+
     static cv::Mat transform_coord(const cv::Mat &Rcw, const cv::Mat &tcw,
                                    const cv::Mat &pt_world) {
         return Rcw * pt_world + tcw;

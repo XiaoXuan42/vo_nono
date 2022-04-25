@@ -13,6 +13,7 @@
 #include "vo_nono/keypoint/triangulate.h"
 #include "vo_nono/pnp.h"
 #include "vo_nono/point.h"
+#include "vo_nono/util/constants.h"
 #include "vo_nono/util/macro.h"
 #include "vo_nono/util/util.h"
 
@@ -86,7 +87,7 @@ std::vector<cv::DMatch> Frontend::match_frame(const vo_ptr<Frame> &ref_frame,
                                               int match_cnt) {
     std::vector<cv::DMatch> matches;
     matches = matcher_->match_descriptor_bf(ref_frame->descriptor, 8, 30,
-                                             match_cnt);
+                                            match_cnt);
 
     std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
     match_kpt1.reserve(matches.size());
@@ -96,8 +97,8 @@ std::vector<cv::DMatch> Frontend::match_frame(const vo_ptr<Frame> &ref_frame,
         match_kpt2.push_back(curframe_->kpts[match.trainIdx]);
     }
     std::vector<unsigned char> mask;
-    matcher_->filter_match_by_rotation_consistency(match_kpt1, match_kpt2,
-                                                    mask, 3);
+    matcher_->filter_match_by_rotation_consistency(match_kpt1, match_kpt2, mask,
+                                                   3);
     matches = filter_by_mask(matches, mask);
     return matches;
 }
@@ -108,8 +109,8 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     std::vector<cv::KeyPoint> kpts;
     cv::Mat descriptor;
     detect_and_compute(image, kpts, descriptor, CNT_KEY_PTS);
-    matcher_ = std::make_unique<ORBMatcher>(
-            ORBMatcher(kpts, descriptor, camera_));
+    matcher_ =
+            std::make_unique<ORBMatcher>(ORBMatcher(kpts, descriptor, camera_));
     curframe_ =
             std::make_shared<Frame>(Frame::create_frame(descriptor, kpts, t));
     curframe_->image = image;
@@ -151,8 +152,8 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 }
 
 int Frontend::initialize(const cv::Mat &image) {
-    keyframe_matches_ = matcher_->match_descriptor_bf(
-            keyframe_->descriptor, 8, 15, CNT_INIT_MATCHES);
+    keyframe_matches_ = matcher_->match_descriptor_bf(keyframe_->descriptor, 8,
+                                                      15, CNT_INIT_MATCHES);
 
     if (keyframe_matches_.size() < 10) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
@@ -339,22 +340,35 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
     assert(proj_matches.size() == is_inliers.size());
     if (cnt_proj_match < CNT_MIN_MATCHES) { return cnt_proj_match; }
     for (int i = 0; i < int(is_inliers.size()); ++i) {
-        if (is_inliers[i] &&
-            !curframe_->is_index_set(proj_matches[i].index)) {
+        if (is_inliers[i] && !curframe_->is_index_set(proj_matches[i].index)) {
             inlier_coords.push_back(pt_coords[i]);
             inlier_img_pts.push_back(img_pts[i]);
             inlier_proj_index.push_back(i);
         }
     }
-    is_inliers2 = PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, camera_,
-                                       Rcw, tcw);
+    PnP::pnp_by_optimize(inlier_coords, inlier_img_pts, camera_, Rcw, tcw);
+
+    cv::Mat proj_mat =
+            Geometry::get_proj_mat(camera_.get_intrinsic_mat(), Rcw, tcw);
+    std::vector<double> reproj_err2(inlier_img_pts.size());
+    is_inliers2.resize(inlier_coords.size());
+    for (int i = 0; i < int(inlier_coords.size()); ++i) {
+        cv::Mat mat_coord = cv::Mat(inlier_coords[i]);
+        double err2 = Geometry::reprojection_err2(proj_mat, mat_coord,
+                                                  inlier_img_pts[i]);
+        if (err2 < chi2_2_5) {
+            is_inliers2[i] = true;
+        } else {
+            is_inliers2[i] = false;
+        }
+    }
 
     cnt_proj_match = 0;
     for (int i = 0; i < int(is_inliers2.size()); ++i) {
         if (is_inliers2[i]) {
             int proj_index = inlier_proj_index[i];
             curframe_->set_map_pt(proj_matches[proj_index].index,
-                                    proj_matches[proj_index].p_map_pt);
+                                  proj_matches[proj_index].p_map_pt);
             cnt_proj_match += 1;
         }
     }
@@ -381,8 +395,8 @@ void Frontend::show_cur_frame_match(const vo_ptr<Frame> &ref_frame,
                                     const std::vector<cv::DMatch> &matches,
                                     const std::string &prefix) const {
     show_matches(ref_frame->id, curframe_->id, ref_frame->image,
-                 curframe_->image, ref_frame->kpts, curframe_->kpts,
-                 matches, prefix);
+                 curframe_->image, ref_frame->kpts, curframe_->kpts, matches,
+                 prefix);
 }
 
 }// namespace vo_nono

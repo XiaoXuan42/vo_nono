@@ -151,6 +151,7 @@ std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
                                        const Camera& camera, cv::Mat& Rcw,
                                        cv::Mat& tcw) {
     std::vector<bool> is_inlier(coords.size(), true);
+    constexpr double standard[4] = {chi2_2_5, chi2_2_5, chi2_2_10, chi2_2_10};
     for (int i = 0; i < 4; ++i) {
         OptimizeGraph graph(camera);
         graph.add_cam_pose(Rcw, tcw, false);
@@ -161,7 +162,7 @@ std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
                 graph.add_edge(0, point_id[j], img_pts[j]);
             }
         }
-        graph.set_loss_kernel(new ceres::HuberLoss(chi2_2_5));
+        graph.set_loss_kernel(new ceres::HuberLoss(standard[i]));
         graph.to_problem();
         ceres::Solver::Options options;
         options.minimizer_type = ceres::TRUST_REGION;
@@ -177,7 +178,7 @@ std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
         for (int j = 0; j < int(coords.size()); ++j) {
             if (is_inlier[j]) {
                 double loss = graph.get_loss(0, point_id[j]);
-                if (loss > chi2_2_5) {
+                if (loss * 2.0 > standard[i]) {
                     new_inliers[j] = false;
                 } else {
                     inlier_cnt += 1;
