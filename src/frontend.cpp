@@ -165,7 +165,7 @@ int Frontend::initialize(const cv::Mat &image) {
     cv::Mat Ess;
     TIME_IT(Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
                                        camera_.get_intrinsic_mat(), cv::RANSAC,
-                                       0.999, 1.0, 1000, mask),
+                                       0.999, 2.0, 1000, mask),
             "Find essential mat cost ");
     // filter outliers
     keyframe_matches_ = filter_by_mask(keyframe_matches_, mask);
