@@ -46,10 +46,11 @@ public:
             const cv::Mat &o_descpt, float soft_dis_th, float hard_dis_th,
             int expect_cnt) const;
 
-    static void filter_match_by_rotation_consistency(
+    static std::vector<cv::DMatch> filter_match_by_rotation_consistency(
+            const std::vector<cv::DMatch> &matches,
             const std::vector<cv::KeyPoint> &kpts1,
-            const std::vector<cv::KeyPoint> &kpts2,
-            std::vector<unsigned char> &mask, const int topK);
+            const std::vector<cv::KeyPoint> &kpts2, int topK);
+    static std::vector<cv::DMatch> filter_match_by_dis(const std::vector<cv::DMatch> &matches, float soft_th, float hard_th, int cnt);
 
     static void filter_match_by_ess(const cv::Mat &Ess,
                                     const cv::Mat &camera_intrinsic,

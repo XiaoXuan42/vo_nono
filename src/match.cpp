@@ -106,11 +106,9 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
     return proj_matches;
 }
 
-namespace {
-std::vector<cv::DMatch> _filter_match_by_dis_th(std::vector<cv::DMatch> matches,
-                                                float soft_dis_th,
-                                                float hard_dis_th,
-                                                int expect_cnt) {
+std::vector<cv::DMatch> ORBMatcher::filter_match_by_dis(
+        const std::vector<cv::DMatch> &matches, float soft_th, float hard_th,
+        int cnt) {
     std::vector<bool> mask(matches.size(), true);
     int bin[256];
     memset(bin, 0, sizeof(bin));
@@ -118,12 +116,12 @@ std::vector<cv::DMatch> _filter_match_by_dis_th(std::vector<cv::DMatch> matches,
         bin[(int) std::floor(matches[i].distance)] += 1;
     }
     int total_cnt = 0;
-    int soft_th_int = (int) soft_dis_th;
-    int hard_th_int = (int) hard_dis_th;
+    int soft_th_int = (int) soft_th;
+    int hard_th_int = (int) hard_th;
     int final_th = soft_th_int;
     for (int i = 0; i < (int) mask.size(); ++i) {
         total_cnt += bin[i];
-        if (i >= soft_th_int && total_cnt >= expect_cnt) {
+        if (i >= soft_th_int && total_cnt >= cnt) {
             final_th = int(i);
             break;
         } else if (i >= hard_th_int) {
@@ -135,10 +133,9 @@ std::vector<cv::DMatch> _filter_match_by_dis_th(std::vector<cv::DMatch> matches,
         if (int(matches[i].distance) > final_th) { mask[i] = false; }
     }
 
-    matches = filter_by_mask(matches, mask);
-    return matches;
+    return filter_by_mask(matches, mask);
 }
-}// namespace
+
 std::vector<cv::DMatch> ORBMatcher::match_descriptor_bf(const cv::Mat &o_descpt,
                                                         float soft_dis_th,
                                                         float hard_dis_th,
@@ -147,37 +144,36 @@ std::vector<cv::DMatch> ORBMatcher::match_descriptor_bf(const cv::Mat &o_descpt,
     std::vector<cv::DMatch> matches;
     auto matcher = cv::BFMatcher(cv::NORM_HAMMING, true);
     matcher.match(o_descpt, descriptors, matches);
-    return _filter_match_by_dis_th(std::move(matches), soft_dis_th, hard_dis_th,
-                                   expect_cnt);
+    return filter_match_by_dis(matches, soft_dis_th, hard_dis_th, expect_cnt);
 }
 
-void ORBMatcher::filter_match_by_rotation_consistency(
+std::vector<cv::DMatch> ORBMatcher::filter_match_by_rotation_consistency(
+        const std::vector<cv::DMatch> &matches,
         const std::vector<cv::KeyPoint> &kpts1,
-        const std::vector<cv::KeyPoint> &kpts2,
-        std::vector<unsigned char> &mask, const int topK) {
-    assert(kpts1.size() == kpts2.size());
+        const std::vector<cv::KeyPoint> &kpts2, const int topK) {
     auto ang_diff_index = [](double diff_ang) {
         if (diff_ang < 0) { diff_ang += 360; }
         return (int) (diff_ang / 3.6);
     };
     std::vector<cv::Point2f> pts1, pts2;
-    pts1.reserve(kpts1.size());
-    pts2.reserve(kpts2.size());
+    pts1.reserve(matches.size());
+    pts2.reserve(matches.size());
     Histogram<double> histo(101, ang_diff_index);
     std::vector<double> ang_diff;
-    for (int i = 0; i < (int) kpts1.size(); ++i) {
-        double diff = kpts1[i].angle - kpts2[i].angle;
+    for (auto &match : matches) {
+        double diff = kpts1[match.queryIdx].angle - kpts2[match.trainIdx].angle;
         histo.insert_element(diff);
         ang_diff.push_back(diff);
 
-        pts1.push_back(kpts1[i].pt);
-        pts2.push_back(kpts2[i].pt);
+        pts1.push_back(kpts1[match.queryIdx].pt);
+        pts2.push_back(kpts2[match.trainIdx].pt);
     }
-    mask.resize(pts1.size(), 1);
+    std::vector<bool> mask(matches.size(), true);
     histo.cal_topK(topK);
-    for (int i = 0; i < (int) kpts1.size(); ++i) {
-        if (!histo.is_topK(ang_diff[i])) { mask[i] = 0; }
+    for (int i = 0; i < (int) matches.size(); ++i) {
+        if (!histo.is_topK(ang_diff[i])) { mask[i] = false; }
     }
+    return filter_by_mask(matches, mask);
 }
 
 void ORBMatcher::filter_match_by_ess(const cv::Mat &Ess,

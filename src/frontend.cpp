@@ -88,18 +88,8 @@ std::vector<cv::DMatch> Frontend::match_frame(const vo_ptr<Frame> &ref_frame,
     std::vector<cv::DMatch> matches;
     matches = matcher_->match_descriptor_bf(ref_frame->descriptor, 8, 30,
                                             match_cnt);
-
-    std::vector<cv::KeyPoint> match_kpt1, match_kpt2;
-    match_kpt1.reserve(matches.size());
-    match_kpt2.reserve(matches.size());
-    for (auto &match : matches) {
-        match_kpt1.push_back(ref_frame->kpts[match.queryIdx]);
-        match_kpt2.push_back(curframe_->kpts[match.trainIdx]);
-    }
-    std::vector<unsigned char> mask;
-    matcher_->filter_match_by_rotation_consistency(match_kpt1, match_kpt2, mask,
-                                                   3);
-    matches = filter_by_mask(matches, mask);
+    matches = ORBMatcher::filter_match_by_rotation_consistency(
+            matches, ref_frame->kpts, curframe_->kpts, 3);
     return matches;
 }
 
