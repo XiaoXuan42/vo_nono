@@ -225,12 +225,12 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     keyframe_matches_ = match_frame(keyframe_, CNT_MATCHES);
     int cnt_match = track_by_match(keyframe_, keyframe_matches_, 6);
     int cnt_proj_match = 0;
-    if (cnt_match < CNT_MIN_MATCHES) {
+    if (cnt_match < CNT_MATCH_MIN_MATCHES) {
         cnt_proj_match = track_by_projection_local_map();
     } else {
         b_match_good_ = true;
     }
-    if (std::max(cnt_proj_match, cnt_match) >= CNT_MIN_MATCHES) {
+    if (std::max(cnt_proj_match, cnt_match) >= CNT_TRACKING_MIN_MATCHES) {
         b_track_good_ = true;
     }
 
@@ -275,7 +275,7 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
                                        << matches.size() - old_matches.size()
                                        << " new match.");
 
-    if (old_matches.size() < CNT_MIN_MATCHES) {
+    if (old_matches.size() < CNT_MATCH_MIN_MATCHES) {
         return int(old_matches.size());
     }
 
@@ -322,9 +322,8 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
     cv::Mat Rcw = curframe_->get_Rcw(), tcw = curframe_->get_Tcw();
     matcher_->set_estimate_pose(Rcw, tcw);
 
-    TIME_IT(proj_matches = matcher_->match_by_projection(points, r_th),
-            "projection match cost ");
-    if (proj_matches.size() < CNT_MIN_MATCHES) {
+    proj_matches = matcher_->match_by_projection(points, r_th);
+    if (proj_matches.size() < CNT_TRACKING_MIN_MATCHES) {
         return int(proj_matches.size());
     }
 
@@ -332,13 +331,12 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
         pt_coords.push_back(proj_match.coord3d);
         img_pts.push_back(proj_match.img_pt);
     }
-    TIME_IT(PnP::pnp_ransac(pt_coords, img_pts, camera_, 100, ransac_th, Rcw,
-                            tcw, is_inliers),
-            "projection pnp cost ");
+    PnP::pnp_ransac(pt_coords, img_pts, camera_, 100, ransac_th, Rcw, tcw,
+                    is_inliers);
 
     cnt_proj_match = cnt_inliers_from_mask(is_inliers);
     assert(proj_matches.size() == is_inliers.size());
-    if (cnt_proj_match < CNT_MIN_MATCHES) { return cnt_proj_match; }
+    if (cnt_proj_match < CNT_TRACKING_MIN_MATCHES) { return cnt_proj_match; }
     for (int i = 0; i < int(is_inliers.size()); ++i) {
         if (is_inliers[i] && !curframe_->is_index_set(proj_matches[i].index)) {
             inlier_coords.push_back(pt_coords[i]);

@@ -39,8 +39,7 @@ public:
         : config_(config),
           camera_(camera),
           state_(State::Start),
-          map_(std::move(p_map)),
-          b_new_keyframe_(false) {
+          map_(std::move(p_map)) {
         log_debug_line("Frontend camera intrinsic matrix:\n"
                        << camera_.get_intrinsic_mat());
     }
@@ -68,11 +67,12 @@ private:
     static constexpr int CNT_INIT_MATCHES = 500;
     static constexpr int CNT_KEY_PTS = 1000;
     static constexpr int CNT_MATCHES = 200;
-    static constexpr int CNT_MIN_MATCHES = 30;
+    static constexpr int CNT_MATCH_MIN_MATCHES = 30;
+    static constexpr int CNT_TRACKING_MIN_MATCHES = 30;
 
     void show_cur_frame_match(const vo_ptr<Frame> &ref_frame,
-                                      const std::vector<cv::DMatch> &matches,
-                                      const std::string &prefix) const;
+                              const std::vector<cv::DMatch> &matches,
+                              const std::string &prefix) const;
 
     FrontendConfig config_;
     const Camera &camera_;
@@ -88,10 +88,10 @@ private:
     vo_ptr<Map> map_;
 
     MotionPredictor motion_pred_;
-    bool b_new_keyframe_;
+    bool b_new_keyframe_ = false;
 
-    bool b_track_good_;
-    bool b_match_good_;
+    bool b_track_good_ = false;
+    bool b_match_good_ = false;
 };
 }// namespace vo_nono
 
