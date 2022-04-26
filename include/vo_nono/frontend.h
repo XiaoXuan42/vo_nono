@@ -53,6 +53,7 @@ private:
     }
 
     std::vector<cv::DMatch> match_frame(const vo_ptr<Frame> &ref_frame,
+                                        float soft_th, float hard_th,
                                         int match_cnt);
     int initialize(const cv::Mat &image);
     bool tracking(const cv::Mat &image, double t);

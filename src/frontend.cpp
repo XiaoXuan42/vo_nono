@@ -84,10 +84,11 @@ void Frontend::detect_and_compute(const cv::Mat &image,
 }
 
 std::vector<cv::DMatch> Frontend::match_frame(const vo_ptr<Frame> &ref_frame,
+                                              float soft_th, float hard_th,
                                               int match_cnt) {
     std::vector<cv::DMatch> matches;
-    matches = matcher_->match_descriptor_bf(ref_frame->descriptor, 8, 30,
-                                            match_cnt);
+    matches = matcher_->match_descriptor_bf(ref_frame->descriptor);
+    matches = ORBMatcher::filter_match_by_dis(matches, soft_th, hard_th, match_cnt);
     matches = ORBMatcher::filter_match_by_rotation_consistency(
             matches, ref_frame->kpts, curframe_->kpts, 3);
     return matches;
@@ -142,8 +143,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 }
 
 int Frontend::initialize(const cv::Mat &image) {
-    keyframe_matches_ = matcher_->match_descriptor_bf(keyframe_->descriptor, 8,
-                                                      15, CNT_INIT_MATCHES);
+    keyframe_matches_ = match_frame(keyframe_, 8, 15, CNT_INIT_MATCHES);
 
     if (keyframe_matches_.size() < 10) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
@@ -212,7 +212,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     curframe_->set_Rcw(motion_Rcw);
     curframe_->set_Tcw(motion_Tcw);
 
-    keyframe_matches_ = match_frame(keyframe_, CNT_MATCHES);
+    keyframe_matches_ = match_frame(keyframe_, 8, 30, CNT_MATCHES);
     int cnt_match = track_by_match(keyframe_, keyframe_matches_, 6);
     int cnt_proj_match = 0;
     if (cnt_match < CNT_MATCH_MIN_MATCHES) {

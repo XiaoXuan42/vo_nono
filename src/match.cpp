@@ -136,15 +136,13 @@ std::vector<cv::DMatch> ORBMatcher::filter_match_by_dis(
     return filter_by_mask(matches, mask);
 }
 
-std::vector<cv::DMatch> ORBMatcher::match_descriptor_bf(const cv::Mat &o_descpt,
-                                                        float soft_dis_th,
-                                                        float hard_dis_th,
-                                                        int expect_cnt) const {
+std::vector<cv::DMatch> ORBMatcher::match_descriptor_bf(
+        const cv::Mat &o_descpt) const {
     assert(hard_dis_th >= soft_dis_th);
     std::vector<cv::DMatch> matches;
     auto matcher = cv::BFMatcher(cv::NORM_HAMMING, true);
     matcher.match(o_descpt, descriptors, matches);
-    return filter_match_by_dis(matches, soft_dis_th, hard_dis_th, expect_cnt);
+    return matches;
 }
 
 std::vector<cv::DMatch> ORBMatcher::filter_match_by_rotation_consistency(

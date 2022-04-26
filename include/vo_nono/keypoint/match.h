@@ -43,8 +43,7 @@ public:
     std::vector<ProjMatch> match_by_projection(
             const std::vector<vo_ptr<MapPoint>> &map_points, float r_th);
     [[nodiscard]] std::vector<cv::DMatch> match_descriptor_bf(
-            const cv::Mat &o_descpt, float soft_dis_th, float hard_dis_th,
-            int expect_cnt) const;
+            const cv::Mat &o_descpt) const;
 
     static std::vector<cv::DMatch> filter_match_by_rotation_consistency(
             const std::vector<cv::DMatch> &matches,
