@@ -83,18 +83,6 @@ void Frontend::detect_and_compute(const cv::Mat &image,
     orb_detector->detectAndCompute(image, cv::Mat(), kpts, dscpts);
 }
 
-std::vector<cv::DMatch> Frontend::match_frame(const vo_ptr<Frame> &ref_frame,
-                                              float soft_th, float hard_th,
-                                              int match_cnt) {
-    std::vector<cv::DMatch> matches;
-    matches = matcher_->match_descriptor_bf(ref_frame->descriptor);
-    matches = ORBMatcher::filter_match_by_dis(matches, soft_th, hard_th,
-                                              match_cnt);
-    matches = ORBMatcher::filter_match_by_rotation_consistency(
-            matches, ref_frame->kpts, curframe_->kpts, 3);
-    return matches;
-}
-
 void Frontend::get_image(const cv::Mat &image, double t) {
     reset_state();
 
