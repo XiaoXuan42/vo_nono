@@ -88,7 +88,8 @@ std::vector<cv::DMatch> Frontend::match_frame(const vo_ptr<Frame> &ref_frame,
                                               int match_cnt) {
     std::vector<cv::DMatch> matches;
     matches = matcher_->match_descriptor_bf(ref_frame->descriptor);
-    matches = ORBMatcher::filter_match_by_dis(matches, soft_th, hard_th, match_cnt);
+    matches = ORBMatcher::filter_match_by_dis(matches, soft_th, hard_th,
+                                              match_cnt);
     matches = ORBMatcher::filter_match_by_rotation_consistency(
             matches, ref_frame->kpts, curframe_->kpts, 3);
     return matches;
@@ -116,7 +117,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         int init_state = initialize(image);
         if (init_state == 0) {
             state_ = State::Tracking;
-            map_->initialize(keyframe_, curframe_, keyframe_matches_);
+            map_->initialize(keyframe_, curframe_, init_matches_);
             b_succ = true;
         } else if (init_state == -1) {
             // not enough matches
@@ -124,7 +125,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         }
     } else if (state_ == State::Tracking) {
         if (tracking(image, t)) {
-            FrameMessage message(curframe_, keyframe_matches_, b_new_keyframe_);
+            FrameMessage message(curframe_, track_matches_, b_new_keyframe_);
             map_->insert_frame(message);
             if (b_new_keyframe_) {
                 keyframe_ = curframe_;
@@ -143,11 +144,15 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 }
 
 int Frontend::initialize(const cv::Mat &image) {
-    keyframe_matches_ = match_frame(keyframe_, 8, 15, CNT_INIT_MATCHES);
+    keyframe_matches_ = matcher_->match_descriptor_bf(keyframe_->descriptor);
+    init_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 15,
+                                                    CNT_INIT_MATCHES);
+    init_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
+            init_matches_, keyframe_->kpts, curframe_->kpts, 3);
 
-    if (keyframe_matches_.size() < 10) { return -1; }
+    if (init_matches_.size() < 10) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
-    for (auto &match : keyframe_matches_) {
+    for (auto &match : init_matches_) {
         matched_pt1.push_back(keyframe_->kpts[match.queryIdx].pt);
         matched_pt2.push_back(curframe_->kpts[match.trainIdx].pt);
     }
@@ -158,11 +163,11 @@ int Frontend::initialize(const cv::Mat &image) {
                                        0.999, 2.0, 1000, mask),
             "Find essential mat cost ");
     // filter outliers
-    keyframe_matches_ = filter_by_mask(keyframe_matches_, mask);
-    if (keyframe_matches_.size() < 50) { return -1; }
+    init_matches_ = filter_by_mask(init_matches_, mask);
+    if (init_matches_.size() < 50) { return -1; }
     matched_pt1.clear();
     matched_pt2.clear();
-    for (auto &match : keyframe_matches_) {
+    for (auto &match : init_matches_) {
         matched_pt1.push_back(keyframe_->kpts[match.queryIdx].pt);
         matched_pt2.push_back(curframe_->kpts[match.trainIdx].pt);
     }
@@ -180,7 +185,7 @@ int Frontend::initialize(const cv::Mat &image) {
     std::vector<bool> inliers;
     int cnt_new_pt = Triangulator::triangulate_and_filter_frames(
             keyframe_.get(), curframe_.get(), camera_.get_intrinsic_mat(),
-            keyframe_matches_, triangulate_result, inliers, 1000);
+            init_matches_, triangulate_result, inliers, 1000);
     if (cnt_new_pt < 40) { return -2; }
 
     double scale = 3;
@@ -195,8 +200,8 @@ int Frontend::initialize(const cv::Mat &image) {
     curframe_->set_Tcw(tcw);
 
     // triangulated points is not scaled because it's no longer needed.
-    assert(keyframe_matches_.size() == inliers.size());
-    keyframe_matches_ = filter_by_mask(keyframe_matches_, inliers);
+    assert(init_matches_.size() == inliers.size());
+    init_matches_ = filter_by_mask(init_matches_, inliers);
 
     log_debug_line("Initialize with R: " << std::endl
                                          << Rcw << std::endl
@@ -212,8 +217,13 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     curframe_->set_Rcw(motion_Rcw);
     curframe_->set_Tcw(motion_Tcw);
 
-    keyframe_matches_ = match_frame(keyframe_, 8, 30, CNT_MATCHES);
-    int cnt_match = track_by_match(keyframe_, keyframe_matches_, 6);
+    keyframe_matches_ = matcher_->match_descriptor_bf(keyframe_->descriptor);
+    track_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 30,
+                                                     CNT_MATCHES);
+    track_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
+            track_matches_, keyframe_->kpts, curframe_->kpts, 3);
+
+    int cnt_match = track_by_match(keyframe_, track_matches_, 6);
     int cnt_proj_match = 0;
     if (cnt_match < CNT_MATCH_MIN_MATCHES) {
         cnt_proj_match = track_by_projection_local_map();
