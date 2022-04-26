@@ -68,10 +68,6 @@ private:
     static constexpr int CNT_MATCH_MIN_MATCHES = 30;
     static constexpr int CNT_TRACKING_MIN_MATCHES = 30;
 
-    void show_cur_frame_match(const vo_ptr<Frame> &ref_frame,
-                              const std::vector<cv::DMatch> &matches,
-                              const std::string &prefix) const;
-
     FrontendConfig config_;
     const Camera &camera_;
     State state_;

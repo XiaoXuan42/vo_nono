@@ -19,20 +19,6 @@
 
 namespace vo_nono {
 namespace {
-[[maybe_unused]] void show_matches(vo_id_t left_id, vo_id_t right_id,
-                                   const cv::Mat &img1, const cv::Mat &img2,
-                                   const std::vector<cv::KeyPoint> &kpts1,
-                                   const std::vector<cv::KeyPoint> &kpts2,
-                                   const std::vector<cv::DMatch> &matches,
-                                   const std::string &prefix) {
-    cv::Mat outimg;
-    std::string title = prefix + " " + std::to_string(left_id) + " match " +
-                        std::to_string(right_id);
-    cv::drawMatches(img1, kpts1, img2, kpts2, matches, outimg);
-    cv::imshow(title, outimg);
-    cv::waitKey(0);
-}
-
 [[maybe_unused]] void show_matches(const vo_ptr<Frame> &frame1,
                                    const vo_ptr<Frame> &frame2,
                                    const std::vector<cv::DMatch> &matches) {
@@ -42,12 +28,6 @@ namespace {
     cv::drawMatches(frame1->image, frame1->kpts, frame2->image, frame2->kpts,
                     matches, outimg);
     cv::imshow(title, outimg);
-    cv::waitKey(0);
-}
-
-[[maybe_unused]] void show_image(const cv::Mat &image,
-                                 const std::string &title) {
-    cv::imshow(title, image);
     cv::waitKey(0);
 }
 
@@ -374,14 +354,6 @@ int Frontend::track_by_projection_frame(const vo_ptr<Frame> &ref_frame) {
 int Frontend::track_by_projection_local_map() {
     std::vector<vo_ptr<MapPoint>> local_pts = map_->get_local_map_points();
     return track_by_projection(local_pts, 20, 15);
-}
-
-void Frontend::show_cur_frame_match(const vo_ptr<Frame> &ref_frame,
-                                    const std::vector<cv::DMatch> &matches,
-                                    const std::string &prefix) const {
-    show_matches(ref_frame->id, curframe_->id, ref_frame->image,
-                 curframe_->image, ref_frame->kpts, curframe_->kpts, matches,
-                 prefix);
 }
 
 }// namespace vo_nono
