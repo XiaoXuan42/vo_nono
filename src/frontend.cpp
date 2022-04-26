@@ -295,7 +295,6 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             inliers[i] = false;
         }
     }
-    log_debug_line(cnt_inlier << " inliers after pnp ransac");
     if (cnt_inlier < 10) { return int(cnt_inlier); }
 
     for (int i = 0; i < (int) pt_coords.size(); ++i) {
@@ -304,10 +303,11 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             inlier_img_pts.push_back(img_pts[i]);
         }
     }
-    PnP::cv_pnp_optimize(inlier_coords, inlier_img_pts, camera_, Rcw, tcw);
+    std::vector<bool> inliers2 = PnP::pnp_by_optimize(
+            inlier_coords, inlier_img_pts, camera_, Rcw, tcw);
     curframe_->set_Rcw(Rcw);
     curframe_->set_Tcw(tcw);
-    return cnt_inlier;
+    return cnt_inliers_from_mask(inliers2);
 }
 
 int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
@@ -350,7 +350,6 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
 
     cv::Mat proj_mat =
             Geometry::get_proj_mat(camera_.get_intrinsic_mat(), Rcw, tcw);
-    std::vector<double> reproj_err2(inlier_img_pts.size());
     is_inliers2.resize(inlier_coords.size());
     for (int i = 0; i < int(inlier_coords.size()); ++i) {
         cv::Mat mat_coord = cv::Mat(inlier_coords[i]);

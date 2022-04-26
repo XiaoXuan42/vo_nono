@@ -151,7 +151,7 @@ std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
                                        const Camera& camera, cv::Mat& Rcw,
                                        cv::Mat& tcw) {
     std::vector<bool> is_inlier(coords.size(), true);
-    constexpr double standard[4] = {chi2_2_5, chi2_2_5, chi2_2_10, chi2_2_10};
+    constexpr double standard[4] = {chi2_2_5, chi2_2_5, chi2_2_5, chi2_2_5};
     for (int i = 0; i < 4; ++i) {
         OptimizeGraph graph(camera);
         graph.add_cam_pose(Rcw, tcw, false);
