@@ -138,7 +138,6 @@ std::vector<cv::DMatch> ORBMatcher::filter_match_by_dis(
 
 std::vector<cv::DMatch> ORBMatcher::match_descriptor_bf(
         const cv::Mat &o_descpt) const {
-    assert(hard_dis_th >= soft_dis_th);
     std::vector<cv::DMatch> matches;
     auto matcher = cv::BFMatcher(cv::NORM_HAMMING, true);
     matcher.match(o_descpt, descriptors, matches);

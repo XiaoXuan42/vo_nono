@@ -126,10 +126,9 @@ int Frontend::initialize(const cv::Mat &image) {
     }
     std::vector<unsigned char> mask;
     cv::Mat Ess;
-    TIME_IT(Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
-                                       camera_.get_intrinsic_mat(), cv::RANSAC,
-                                       0.999, 2.0, 1000, mask),
-            "Find essential mat cost ");
+    Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
+                               camera_.get_intrinsic_mat(), cv::RANSAC, 0.999,
+                               2.0, 1000, mask);
     // filter outliers
     init_matches_ = filter_by_mask(init_matches_, mask);
     if (init_matches_.size() < 50) { return -1; }
