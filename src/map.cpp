@@ -11,7 +11,7 @@
 #include "vo_nono/util/util.h"
 
 namespace vo_nono {
-void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
+bool InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
                             const cv::Mat &o1_cw, const cv::Mat &coord) {
     assert(coord.type() == CV_32F);
     cv::Mat t0 = coord + o0_cw;
@@ -24,7 +24,7 @@ void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
             t1_square / (t0_square * t0_square * (1.0 - cos2)) * basic_var_;
     double cur_d = 1.0 / std::sqrt(t0_square);
 
-    if (cnt_ >= 3 && std::abs(cur_d - mean_) > 2 * sqrt_var_) { return; }
+    if (cnt_ >= 3 && std::abs(cur_d - mean_) > 2 * sqrt_var_) { return false; }
 
     double update_mean = (var_ * cur_d + cur_var * mean_) / (cur_var + var_);
     double update_var = (var_ * cur_var) / (cur_var + var_);
@@ -35,6 +35,7 @@ void InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
     dir_ = (dir_ * float(cnt_) + Rcw0 * t0 / cv::norm(t0)) / float(cnt_ + 1);
     dir_ /= cv::norm(dir_);
     cnt_ += 1;
+    return true;
 }
 
 LocalMap::LocalMap(Map *map) : map_(map), camera_(map->camera_) {}
@@ -64,6 +65,7 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
 
     assert(valid_match.size() == tri_inliers.size());
     int cnt_new_tri = 0;
+    int filter_succ = 0, filter_total = 0;
     for (int i = 0; i < int(tri_inliers.size()); ++i) {
         if (tri_inliers[i] &&
             !curframe_->is_index_set(valid_match[i].trainIdx) &&
@@ -71,9 +73,12 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
             vo_ptr<MapPoint> target_pt;
 
             int keyframe_index = valid_match[i].queryIdx;
-            filters_[keyframe_index].filter(
-                    keyframe_->get_Tcw(), keyframe_->get_Rcw(),
-                    curframe_->get_Tcw(), tri_results[i]);
+            if (filters_[keyframe_index].filter(
+                        keyframe_->get_Tcw(), keyframe_->get_Rcw(),
+                        curframe_->get_Tcw(), tri_results[i])) {
+                filter_succ += 1;
+            }
+            filter_total += 1;
             if (keyframe_->is_index_set(keyframe_index)) {
                 target_pt = keyframe_->get_map_pt(keyframe_index);
                 target_pt->set_coord(filters_[keyframe_index].get_coord(
@@ -98,6 +103,8 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
         }
     }
     log_debug_line("Triangulated " << cnt_new_tri << " new points.");
+    log_debug_line("Total filtered " << filter_total << " with " << filter_succ
+                                    << " succeeded.");
 }
 
 void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
@@ -139,7 +146,7 @@ void Map::global_bundle_adjustment() {
         b_global_ba_ = false;
         //if (keyframes_.size() < 5) { continue; }
 
-        _global_bundle_adjustment(glb_lock);
+        //_global_bundle_adjustment(glb_lock);
     }
 }
 

@@ -34,7 +34,7 @@ class LocalMap;
 class InvDepthFilter {
 public:
     InvDepthFilter() : dir_(cv::Mat::zeros(3, 1, CV_32F)) {}
-    void filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0, const cv::Mat &o1_cw,
+    bool filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0, const cv::Mat &o1_cw,
                 const cv::Mat &coord);
     [[nodiscard]] double get_variance() const { return var_; }
     [[nodiscard]] cv::Mat get_coord(const cv::Mat &o_cw,

@@ -87,12 +87,6 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
             map_pts.push_back(map_pt);
         }
     }
-
-    log_debug_line(in_image << " projected inside image with " << proj_exceed
-                            << " points distance too far, " << no_near
-                            << " points no near point, " << collide
-                            << " collided.");
-
     std::vector<ProjMatch> proj_matches;
     for (auto pair : book) {
         int frame_index = pair.first;
@@ -102,7 +96,11 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
                                             img_pts[cur_index],
                                             map_pts[cur_index]));
     }
-    log_debug_line("Total projected " << proj_matches.size() << " points.");
+    log_debug_line(in_image << " projected inside image with " << proj_exceed
+                            << " points distance too far, " << no_near
+                            << " points no near point, " << collide
+                            << " collided, total projected "
+                            << proj_matches.size());
     return proj_matches;
 }
 

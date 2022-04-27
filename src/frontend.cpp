@@ -216,6 +216,9 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
                    << ":\n"
                    << curframe_->get_Rcw() << std::endl
                    << curframe_->get_Tcw() << std::endl);
+    log_debug_line("Keyframe " << keyframe_->id << " has "
+                               << keyframe_->get_cnt_map_pt()
+                               << " map points.");
     return b_track_good_;
 }
 
