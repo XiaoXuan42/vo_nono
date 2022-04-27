@@ -115,7 +115,7 @@ public:
         trajectory.reserve(frames_.size());
         for (const vo_ptr<Frame> &frame : frames_) {
             trajectory.emplace_back(
-                    std::make_pair(frame->time, frame->get_pose()));
+                    std::make_pair(frame->get_time(), frame->get_pose()));
         }
         return trajectory;
     }
@@ -171,7 +171,7 @@ public:
 
 private:
     void insert_key_frame(const vo_ptr<Frame> &frame) {
-        log_debug_line("Switch keyframe: " << frame->id);
+        log_debug_line("Switch keyframe: " << frame->get_id());
         keyframes_.push_back(frame);
         b_global_ba_ = true;
         cv_global_ba_.notify_all();

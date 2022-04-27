@@ -22,11 +22,11 @@ namespace {
 [[maybe_unused]] void show_matches(const vo_ptr<Frame> &frame1,
                                    const vo_ptr<Frame> &frame2,
                                    const std::vector<cv::DMatch> &matches) {
-    std::string title =
-            std::to_string(frame1->id) + " match " + std::to_string(frame2->id);
+    std::string title = std::to_string(frame1->get_id()) + " match " +
+                        std::to_string(frame2->get_id());
     cv::Mat outimg;
-    cv::drawMatches(frame1->image, frame1->kpts, frame2->image, frame2->kpts,
-                    matches, outimg);
+    cv::drawMatches(frame1->image, frame1->get_keypoints(), frame2->image,
+                    frame2->get_keypoints(), matches, outimg);
     cv::imshow(title, outimg);
     cv::waitKey(0);
 }
@@ -35,8 +35,8 @@ namespace {
     cv::Mat img = frame->image.clone();
     cv::cvtColor(img, img, cv::COLOR_GRAY2RGB);
     int cnt = 0;
-    for (int i = 0; i < int(frame->kpts.size()); ++i) {
-        auto pt = frame->kpts[i].pt;
+    for (int i = 0; i < int(frame->feature_points.size()); ++i) {
+        auto pt = frame->feature_points[i].keypoint.pt;
         if (frame->is_index_set(i)) {
             cnt += 1;
             if (cnt > 10) { break; }
@@ -50,7 +50,7 @@ namespace {
                         CV_RGB(255.0, 0.0, 0.0));
         }
     }
-    cv::imshow("frame " + std::to_string(frame->id), img);
+    cv::imshow("frame " + std::to_string(frame->get_id()), img);
     cv::waitKey(0);
 }
 }// namespace
@@ -112,17 +112,21 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 }
 
 int Frontend::initialize(const cv::Mat &image) {
-    keyframe_matches_ = matcher_->match_descriptor_bf(keyframe_->descriptor);
+    keyframe_matches_ =
+            matcher_->match_descriptor_bf(keyframe_->get_descriptors());
     init_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 15,
                                                     CNT_INIT_MATCHES);
     init_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
-            init_matches_, keyframe_->kpts, curframe_->kpts, 3);
+            init_matches_, keyframe_->get_keypoints(),
+            curframe_->get_keypoints(), 3);
 
     if (init_matches_.size() < 10) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
     for (auto &match : init_matches_) {
-        matched_pt1.push_back(keyframe_->kpts[match.queryIdx].pt);
-        matched_pt2.push_back(curframe_->kpts[match.trainIdx].pt);
+        matched_pt1.push_back(
+                keyframe_->feature_points[match.queryIdx].keypoint.pt);
+        matched_pt2.push_back(
+                curframe_->feature_points[match.trainIdx].keypoint.pt);
     }
     std::vector<unsigned char> mask;
     cv::Mat Ess;
@@ -135,8 +139,10 @@ int Frontend::initialize(const cv::Mat &image) {
     matched_pt1.clear();
     matched_pt2.clear();
     for (auto &match : init_matches_) {
-        matched_pt1.push_back(keyframe_->kpts[match.queryIdx].pt);
-        matched_pt2.push_back(curframe_->kpts[match.trainIdx].pt);
+        matched_pt1.push_back(
+                keyframe_->feature_points[match.queryIdx].keypoint.pt);
+        matched_pt2.push_back(
+                curframe_->feature_points[match.trainIdx].keypoint.pt);
     }
 
     cv::Mat Rcw, tcw;
@@ -184,11 +190,13 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     curframe_->set_Rcw(motion_Rcw);
     curframe_->set_Tcw(motion_Tcw);
 
-    keyframe_matches_ = matcher_->match_descriptor_bf(keyframe_->descriptor);
+    keyframe_matches_ =
+            matcher_->match_descriptor_bf(keyframe_->get_descriptors());
     track_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 30,
                                                      CNT_MATCHES);
     track_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
-            track_matches_, keyframe_->kpts, curframe_->kpts, 3);
+            track_matches_, keyframe_->get_keypoints(),
+            curframe_->get_keypoints(), 3);
 
     int cnt_match = track_by_match(keyframe_, track_matches_, 6);
     int cnt_proj_match = 0;
@@ -216,7 +224,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
                    << ":\n"
                    << curframe_->get_Rcw() << std::endl
                    << curframe_->get_Tcw() << std::endl);
-    log_debug_line("Keyframe " << keyframe_->id << " has "
+    log_debug_line("Keyframe " << keyframe_->get_id() << " has "
                                << keyframe_->get_cnt_map_pt()
                                << " map points.");
     return b_track_good_;
@@ -237,10 +245,11 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             old_matches.push_back(matches[i]);
             pt_coords.push_back(
                     ref_frame->get_map_pt(matches[i].queryIdx)->get_coord());
-            img_pts.push_back(curframe_->kpts[matches[i].trainIdx].pt);
+            img_pts.push_back(
+                    curframe_->feature_points[matches[i].trainIdx].keypoint.pt);
         }
     }
-    log_debug_line("Match with frame " << ref_frame->id << " "
+    log_debug_line("Match with frame " << ref_frame->get_id() << " "
                                        << old_matches.size() << " old match. "
                                        << matches.size() - old_matches.size()
                                        << " new match.");

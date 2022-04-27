@@ -14,6 +14,19 @@
 #include "vo_nono/util/macro.h"
 
 namespace vo_nono {
+class FeaturePoint {
+public:
+    cv::KeyPoint keypoint;
+    cv::Mat descriptor;
+    vo_ptr<Frame> map_point;
+    int index;
+
+    FeaturePoint(cv::KeyPoint kpt, cv::Mat dscpts, int idx)
+        : keypoint(kpt),
+          descriptor(std::move(dscpts)),
+          index(idx) {}
+};
+
 class Frame {
 public:
     cv::Mat image;
@@ -70,9 +83,7 @@ public:
     }
 
     // keypoints that already has corresponding map point
-    [[nodiscard]] size_t get_cnt_map_pt() const {
-        return index_to_pt_.size();
-    }
+    [[nodiscard]] size_t get_cnt_map_pt() const { return index_to_pt_.size(); }
     void set_map_pt(int i, const std::shared_ptr<MapPoint> &pt) {
         //assert(index_to_pt_.count(i) == 0);
         index_to_pt_.insert({i, pt});
@@ -88,25 +99,43 @@ public:
         for (auto &it : index_to_pt_) { res.push_back(it.second); }
         return res;
     }
+    [[nodiscard]] std::vector<cv::KeyPoint> get_keypoints() const {
+        std::vector<cv::KeyPoint> result;
+        for (auto &point : feature_points) { result.push_back(point.keypoint); }
+        return result;
+    }
+    [[nodiscard]] cv::Mat get_descriptors() const {
+        cv::Mat result = cv::Mat(int(feature_points.size()), 32, CV_8U);
+        for (int i = 0; i < int(feature_points.size()); ++i) {
+            feature_points[i].descriptor.copyTo(result.row(i));
+        }
+        return result;
+    }
     bool is_index_set(int i) const { return index_to_pt_.count(i) != 0; }
 
-    static vo_id_t frame_id_cnt;
+    [[nodiscard]] vo_id_t get_id() const { return id_; }
+    [[nodiscard]] double get_time() const { return time; }
 
-    vo_id_t id;
-    std::vector<cv::KeyPoint> kpts;
-    cv::Mat descriptor;
-    double time;
+    std::vector<FeaturePoint> feature_points;
 
 private:
-    Frame(vo_id_t id, cv::Mat descriptor, std::vector<cv::KeyPoint> kpts,
-          double time, cv::Mat Rcw, cv::Mat Tcw)
-        : id(id),
-          kpts(std::move(kpts)),
-          descriptor(std::move(descriptor)),
+    static vo_id_t frame_id_cnt;
+    Frame(vo_id_t id, const cv::Mat &descriptor,
+          const std::vector<cv::KeyPoint> &kpts, double time, cv::Mat Rcw,
+          cv::Mat Tcw)
+        : id_(id),
           time(time),
           Rcw_(std::move(Rcw)),
-          Tcw_(std::move(Tcw)) {}
+          Tcw_(std::move(Tcw)) {
+        assert(descriptor.rows == int(kpts.size()));
+        for (int i = 0; i < descriptor.rows; ++i) {
+            feature_points.emplace_back(
+                    FeaturePoint(kpts[i], descriptor.row(i), i));
+        }
+    }
 
+    vo_id_t id_;
+    double time;
     cv::Mat Rcw_;
     cv::Mat Tcw_;
 

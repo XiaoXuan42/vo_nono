@@ -12,7 +12,8 @@ class MapPoint {
 public:
     static MapPoint create_map_point(float x, float y, float z,
                                      const cv::Mat& desc, int pyramid_level);
-    static MapPoint create_map_point(const cv::Mat& coord, const cv::Mat& desc, int pyramid_level);
+    static MapPoint create_map_point(const cv::Mat& coord, const cv::Mat& desc,
+                                     int pyramid_level);
 
     [[nodiscard]] vo_id_t get_id() const { return id_; }
     [[nodiscard]] int get_pyramid_level() const { return pyramid_level_; }
