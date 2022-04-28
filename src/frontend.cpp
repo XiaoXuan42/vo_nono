@@ -36,7 +36,7 @@ namespace {
     cv::cvtColor(img, img, cv::COLOR_GRAY2RGB);
     int cnt = 0;
     for (int i = 0; i < int(frame->feature_points.size()); ++i) {
-        auto pt = frame->feature_points[i].keypoint.pt;
+        auto pt = frame->feature_points[i]->keypoint.pt;
         if (frame->is_index_set(i)) {
             cnt += 1;
             if (cnt > 10) { break; }
@@ -124,9 +124,9 @@ int Frontend::initialize(const cv::Mat &image) {
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
     for (auto &match : init_matches_) {
         matched_pt1.push_back(
-                keyframe_->feature_points[match.queryIdx].keypoint.pt);
+                keyframe_->feature_points[match.queryIdx]->keypoint.pt);
         matched_pt2.push_back(
-                curframe_->feature_points[match.trainIdx].keypoint.pt);
+                curframe_->feature_points[match.trainIdx]->keypoint.pt);
     }
     std::vector<unsigned char> mask;
     cv::Mat Ess;
@@ -140,9 +140,9 @@ int Frontend::initialize(const cv::Mat &image) {
     matched_pt2.clear();
     for (auto &match : init_matches_) {
         matched_pt1.push_back(
-                keyframe_->feature_points[match.queryIdx].keypoint.pt);
+                keyframe_->feature_points[match.queryIdx]->keypoint.pt);
         matched_pt2.push_back(
-                curframe_->feature_points[match.trainIdx].keypoint.pt);
+                curframe_->feature_points[match.trainIdx]->keypoint.pt);
     }
 
     cv::Mat Rcw, tcw;
@@ -246,7 +246,7 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             pt_coords.push_back(
                     ref_frame->get_map_pt(matches[i].queryIdx)->get_coord());
             img_pts.push_back(
-                    curframe_->feature_points[matches[i].trainIdx].keypoint.pt);
+                    curframe_->feature_points[matches[i].trainIdx]->keypoint.pt);
         }
     }
     log_debug_line("Match with frame " << ref_frame->get_id() << " "

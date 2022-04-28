@@ -13,6 +13,8 @@ template<typename T>
 using vo_ptr = std::shared_ptr<T>;
 template<typename T>
 using vo_uptr = std::unique_ptr<T>;
+template<typename T>
+using vo_wptr = std::weak_ptr<T>;
 }// namespace vo_nono
 
 #endif//VO_NONO_TYPES_H

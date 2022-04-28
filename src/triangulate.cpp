@@ -68,8 +68,8 @@ int Triangulator::triangulate_and_filter_frames(
     cv::Mat proj2 = Geometry::get_proj_mat(cam_intrinsic_mat, frame2->get_Rcw(),
                                            frame2->get_Tcw());
     for (auto& match : matches) {
-        img_pt1.push_back(frame1->feature_points[match.queryIdx].keypoint.pt);
-        img_pt2.push_back(frame2->feature_points[match.trainIdx].keypoint.pt);
+        img_pt1.push_back(frame1->feature_points[match.queryIdx]->keypoint.pt);
+        img_pt2.push_back(frame2->feature_points[match.trainIdx]->keypoint.pt);
     }
     triangulate(proj1, proj2, img_pt1, img_pt2, tri_result);
     return filter_triangulate(frame1->get_Rcw(), frame1->get_Tcw(),

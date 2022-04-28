@@ -8,6 +8,7 @@
 
 namespace vo_nono {
 class Frame;
+class FeaturePoint;
 class MapPoint {
 public:
     static MapPoint create_map_point(float x, float y, float z,
@@ -51,6 +52,8 @@ private:
     cv::Mat coord_;
     cv::Mat desc_;
     int pyramid_level_;
+    // feature points that points to this point
+    std::vector<std::weak_ptr<FeaturePoint>> feature_points_;
 };
 }// namespace vo_nono
 

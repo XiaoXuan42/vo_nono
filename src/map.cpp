@@ -50,8 +50,8 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
                             t21);
     cv::Mat ess = Epipolar::compute_essential(R21, t21);
     for (auto &match : matches) {
-        pts1.push_back(keyframe_->feature_points[match.queryIdx].keypoint.pt);
-        pts2.push_back(curframe_->feature_points[match.trainIdx].keypoint.pt);
+        pts1.push_back(keyframe_->feature_points[match.queryIdx]->keypoint.pt);
+        pts2.push_back(curframe_->feature_points[match.trainIdx]->keypoint.pt);
     }
     ORBMatcher::filter_match_by_ess(ess, camera_.get_intrinsic_mat(), pts1,
                                     pts2, 0.01, mask);
@@ -91,9 +91,9 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
                                             keyframe_->get_Tcw(),
                                             keyframe_->get_Rcw()),
                                     keyframe_->feature_points[keyframe_index]
-                                            .descriptor,
+                                            ->descriptor,
                                     keyframe_->feature_points[keyframe_index]
-                                            .keypoint.octave));
+                                            ->keypoint.octave));
                     keyframe_->set_map_pt(keyframe_index, target_pt);
                     cnt_new_tri += 1;
                 }
@@ -119,7 +119,7 @@ void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
         if (!keyframe->is_index_set(int(i))) {
             own_point_[i] = true;
             filters_[i].set_information(camera_,
-                                        keyframe->feature_points[i].keypoint.pt,
+                                        keyframe->feature_points[i]->keypoint.pt,
                                         basic_var);
         }
     }
@@ -178,7 +178,7 @@ void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
                         point_id = point_to_id[pt];
                     }
                     graph.add_edge(cam_id, point_id,
-                                   cur_frame->feature_points[i].keypoint.pt);
+                                   cur_frame->feature_points[i]->keypoint.pt);
                 }
             }
             active_frames += 1;
@@ -198,7 +198,7 @@ void Map::_global_bundle_adjustment(std::unique_lock<std::mutex> &lock) {
                         int point_id = point_to_id[pt];
                         graph.add_edge(
                                 cam_id, point_id,
-                                cur_frame->feature_points[i].keypoint.pt);
+                                cur_frame->feature_points[i]->keypoint.pt);
                     }
                 }
             }

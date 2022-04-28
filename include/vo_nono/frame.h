@@ -16,13 +16,15 @@
 namespace vo_nono {
 class FeaturePoint {
 public:
+    Frame *frame;
     cv::KeyPoint keypoint;
     cv::Mat descriptor;
     vo_ptr<MapPoint> map_point;
     int index;
 
-    FeaturePoint(cv::KeyPoint kpt, cv::Mat dscpts, int idx)
-        : keypoint(kpt),
+    FeaturePoint(Frame *pframe, cv::KeyPoint kpt, cv::Mat dscpts, int idx)
+        : frame(pframe),
+          keypoint(kpt),
           descriptor(std::move(dscpts)),
           index(idx) {}
 };
@@ -35,7 +37,18 @@ public:
                               std::vector<cv::KeyPoint> kpts, double time,
                               cv::Mat Rcw = cv::Mat::eye(3, 3, CV_32F),
                               cv::Mat Tcw = cv::Mat::zeros(3, 1, CV_32F));
+    Frame(Frame &&other) noexcept { copy_from(other); }
+    Frame &operator=(Frame &&other) noexcept {
+        copy_from(other);
+        return *this;
+    }
+    Frame(const Frame &) = delete;
+    Frame &operator=(const Frame &) = delete;
+    Frame() = delete;
 
+    ~Frame() {
+        for (auto p_feature : feature_points) { delete p_feature; }
+    }
 
     void set_Rcw(const cv::Mat &Rcw) {
         assert(Rcw.rows == 3);
@@ -85,39 +98,43 @@ public:
     // keypoints that already has corresponding map point
     [[nodiscard]] size_t get_cnt_map_pt() const { return map_pt_cnt_; }
     void set_map_pt(int i, const std::shared_ptr<MapPoint> &pt) {
-        if (!feature_points[i].map_point) { map_pt_cnt_ += 1; }
-        feature_points[i].map_point = pt;
+        assert(i < int(feature_points.size()));
+        if (!feature_points[i]->map_point) { map_pt_cnt_ += 1; }
+        feature_points[i]->map_point = pt;
     }
     [[nodiscard]] std::shared_ptr<MapPoint> get_map_pt(int i) const {
-        return feature_points[i].map_point;
+        assert(i < int(feature_points.size()));
+        return feature_points[i]->map_point;
     }
     [[nodiscard]] std::vector<vo_ptr<MapPoint>> get_all_map_pts() {
         std::vector<vo_ptr<MapPoint>> res;
         for (auto &feat_point : feature_points) {
-            if (feat_point.map_point) { res.push_back(feat_point.map_point); }
+            if (feat_point->map_point) { res.push_back(feat_point->map_point); }
         }
         return res;
     }
     [[nodiscard]] std::vector<cv::KeyPoint> get_keypoints() const {
         std::vector<cv::KeyPoint> result;
-        for (auto &point : feature_points) { result.push_back(point.keypoint); }
+        for (auto &point : feature_points) {
+            result.push_back(point->keypoint);
+        }
         return result;
     }
     [[nodiscard]] cv::Mat get_descriptors() const {
         cv::Mat result = cv::Mat(int(feature_points.size()), 32, CV_8U);
         for (int i = 0; i < int(feature_points.size()); ++i) {
-            feature_points[i].descriptor.copyTo(result.row(i));
+            feature_points[i]->descriptor.copyTo(result.row(i));
         }
         return result;
     }
     [[nodiscard]] bool is_index_set(int i) const {
-        return bool(feature_points[i].map_point);
+        return bool(feature_points[i]->map_point);
     }
 
     [[nodiscard]] vo_id_t get_id() const { return id_; }
-    [[nodiscard]] double get_time() const { return time; }
+    [[nodiscard]] double get_time() const { return time_; }
 
-    std::vector<FeaturePoint> feature_points;
+    std::vector<FeaturePoint *> feature_points;
 
 private:
     static vo_id_t frame_id_cnt;
@@ -125,18 +142,28 @@ private:
           const std::vector<cv::KeyPoint> &kpts, double time, cv::Mat Rcw,
           cv::Mat Tcw)
         : id_(id),
-          time(time),
+          time_(time),
           Rcw_(std::move(Rcw)),
           Tcw_(std::move(Tcw)) {
         assert(descriptor.rows == int(kpts.size()));
+        feature_points.resize(descriptor.rows);
         for (int i = 0; i < descriptor.rows; ++i) {
-            feature_points.emplace_back(
-                    FeaturePoint(kpts[i], descriptor.row(i), i));
+            feature_points[i] =
+                    new FeaturePoint(this, kpts[i], descriptor.row(i), i);
         }
     }
 
-    vo_id_t id_;
-    double time;
+    void copy_from(Frame &other) {
+        id_ = other.id_;
+        time_ = other.time_;
+        Rcw_ = other.Rcw_;
+        Tcw_ = other.Tcw_;
+        map_pt_cnt_ = other.map_pt_cnt_;
+        feature_points = std::move(other.feature_points);
+    }
+
+    vo_id_t id_{};
+    double time_{};
     cv::Mat Rcw_;
     cv::Mat Tcw_;
 
