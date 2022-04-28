@@ -94,6 +94,8 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
                                             ->descriptor,
                                     keyframe_->feature_points[keyframe_index]
                                             ->keypoint.octave));
+                    target_pt->associate_feature_point(
+                            keyframe_->feature_points[keyframe_index]);
                     keyframe_->set_map_pt(keyframe_index, target_pt);
                     cnt_new_tri += 1;
                 }
@@ -118,9 +120,9 @@ void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
     for (size_t i = 0; i < keyframe->feature_points.size(); ++i) {
         if (!keyframe->is_index_set(int(i))) {
             own_point_[i] = true;
-            filters_[i].set_information(camera_,
-                                        keyframe->feature_points[i]->keypoint.pt,
-                                        basic_var);
+            filters_[i].set_information(
+                    camera_, keyframe->feature_points[i]->keypoint.pt,
+                    basic_var);
         }
     }
     keyframe_ = keyframe;

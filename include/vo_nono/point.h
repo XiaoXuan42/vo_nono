@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <opencv2/core.hpp>
+#include <unordered_set>
 
 #include "vo_nono/types.h"
 
@@ -34,6 +35,12 @@ public:
     }
 
     [[nodiscard]] const cv::Mat& get_desc() const { return desc_; }
+    void associate_feature_point(const FeaturePoint* feat_point) {
+        feature_points_.insert(feat_point);
+    }
+    void unassociate_feature_point(const FeaturePoint* feat_point) {
+        feature_points_.erase(feat_point);
+    }
 
 private:
     static vo_id_t map_point_id_cnt;
@@ -53,7 +60,7 @@ private:
     cv::Mat desc_;
     int pyramid_level_;
     // feature points that points to this point
-    std::vector<std::weak_ptr<FeaturePoint>> feature_points_;
+    std::unordered_set<const FeaturePoint*> feature_points_;
 };
 }// namespace vo_nono
 

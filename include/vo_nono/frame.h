@@ -47,7 +47,12 @@ public:
     Frame() = delete;
 
     ~Frame() {
-        for (auto p_feature : feature_points) { delete p_feature; }
+        for (auto p_feature : feature_points) {
+            if (p_feature->map_point) {
+                p_feature->map_point->unassociate_feature_point(p_feature);
+            }
+            delete p_feature;
+        }
     }
 
     void set_Rcw(const cv::Mat &Rcw) {
