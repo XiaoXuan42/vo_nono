@@ -18,7 +18,7 @@ class FeaturePoint {
 public:
     cv::KeyPoint keypoint;
     cv::Mat descriptor;
-    vo_ptr<Frame> map_point;
+    vo_ptr<MapPoint> map_point;
     int index;
 
     FeaturePoint(cv::KeyPoint kpt, cv::Mat dscpts, int idx)
@@ -83,20 +83,19 @@ public:
     }
 
     // keypoints that already has corresponding map point
-    [[nodiscard]] size_t get_cnt_map_pt() const { return index_to_pt_.size(); }
+    [[nodiscard]] size_t get_cnt_map_pt() const { return map_pt_cnt_; }
     void set_map_pt(int i, const std::shared_ptr<MapPoint> &pt) {
-        //assert(index_to_pt_.count(i) == 0);
-        index_to_pt_.insert({i, pt});
-        pt_to_index_.insert({pt->get_id(), i});
+        if (!feature_points[i].map_point) { map_pt_cnt_ += 1; }
+        feature_points[i].map_point = pt;
     }
-    std::shared_ptr<MapPoint> get_map_pt(int i) const {
-        assert(index_to_pt_.count(i) != 0);
-        return index_to_pt_.at(i);
+    [[nodiscard]] std::shared_ptr<MapPoint> get_map_pt(int i) const {
+        return feature_points[i].map_point;
     }
-    std::vector<vo_ptr<MapPoint>> get_all_map_pts() const {
+    [[nodiscard]] std::vector<vo_ptr<MapPoint>> get_all_map_pts() {
         std::vector<vo_ptr<MapPoint>> res;
-        res.reserve(index_to_pt_.size());
-        for (auto &it : index_to_pt_) { res.push_back(it.second); }
+        for (auto &feat_point : feature_points) {
+            if (feat_point.map_point) { res.push_back(feat_point.map_point); }
+        }
         return res;
     }
     [[nodiscard]] std::vector<cv::KeyPoint> get_keypoints() const {
@@ -111,7 +110,9 @@ public:
         }
         return result;
     }
-    bool is_index_set(int i) const { return index_to_pt_.count(i) != 0; }
+    [[nodiscard]] bool is_index_set(int i) const {
+        return bool(feature_points[i].map_point);
+    }
 
     [[nodiscard]] vo_id_t get_id() const { return id_; }
     [[nodiscard]] double get_time() const { return time; }
@@ -139,10 +140,7 @@ private:
     cv::Mat Rcw_;
     cv::Mat Tcw_;
 
-    // from index of kpts to map points
-    std::unordered_map<int, std::shared_ptr<MapPoint>> index_to_pt_;
-    // from map point's id to index
-    std::unordered_map<vo_id_t, int> pt_to_index_;
+    int map_pt_cnt_ = 0;
 };
 }// namespace vo_nono
 
