@@ -165,6 +165,7 @@ private:
         Tcw_ = other.Tcw_;
         map_pt_cnt_ = other.map_pt_cnt_;
         feature_points = std::move(other.feature_points);
+        for (auto &feat : feature_points) { feat->frame = this; }
     }
 
     vo_id_t id_{};
