@@ -13,7 +13,8 @@ public:
                            const std::vector<cv::Point2f>& img_pts,
                            const Camera& camera, int iter_cnt, float proj_th,
                            cv::Mat& Rcw, cv::Mat& tcw,
-                           std::vector<bool>& is_inlier);
+                           std::vector<bool>& is_inlier,
+                           double th =5.99);
 
     static void cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
                               const std::vector<cv::Point2f>& img_pts,

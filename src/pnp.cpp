@@ -49,17 +49,18 @@ inline void _pnp_ransac_select(const std::vector<cv::Point2f>& img_pts,
 void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
                      const std::vector<cv::Point2f>& img_pts,
                      const Camera& camera, int iter_cnt, float proj_th,
-                     cv::Mat& Rcw, cv::Mat& tcw, std::vector<bool>& is_inlier) {
+                     cv::Mat& Rcw, cv::Mat& tcw, std::vector<bool>& is_inlier,
+                     const double th) {
+    // H(l) = l (l < th) or th - 1/2 + sqrt(l - th + 1/4) (l >= th)
     assert(img_pts.size() > 4);
     std::vector<std::vector<int>> rd_selects;
     _pnp_ransac_select(img_pts, iter_cnt, rd_selects);
 
     cv::Mat init_rvec, init_tcw = tcw.clone();
     cv::Rodrigues(Rcw, init_rvec);
-    int best_cnt_inliers = 0;
-    double best_proj_error = 0.0;
-    cv::Mat best_rvec;
-
+    std::vector<cv::Mat> candidate_rvec, candidate_tcw;
+    candidate_rvec.push_back(init_rvec.clone());
+    candidate_tcw.push_back(tcw.clone());
     for (auto& sel : rd_selects) {
         std::vector<cv::Matx31f> sample_coords;
         std::vector<cv::Point2f> sample_img_pts;
@@ -72,19 +73,36 @@ void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
         cv::solvePnP(sample_coords, sample_img_pts, camera.get_intrinsic_mat(),
                      std::vector<double>(), cur_rvec, cur_tcw, false,
                      cv::SOLVEPNP_P3P);
+        candidate_tcw.push_back(cur_tcw);
+        candidate_rvec.push_back(cur_rvec);
+    }
+
+    int best_cnt_inliers = 0;
+    double best_proj_error = std::numeric_limits<double>::max();
+    cv::Mat best_rvec;
+    auto loss_fn = [=](double loss) {
+        if (loss <= th) {
+            return loss;
+        } else {
+            return std::sqrt(loss - th + 0.25) + th - 0.5;
+        }
+    };
+    for (int i = 0; i < int(candidate_rvec.size()); ++i) {
+        cv::Mat cur_rvec = candidate_rvec[i], cur_tcw = candidate_tcw[i];
         std::vector<cv::Point2f> res_img_pts;
         cv::projectPoints(coords, cur_rvec, cur_tcw, camera.get_intrinsic_mat(),
                           std::vector<double>(), res_img_pts);
         int cnt_inlier = 0;
         double proj_error = 0.0;
         std::vector<bool> cur_is_inlier(img_pts.size(), false);
-        for (int i = 0; i < (int) img_pts.size(); ++i) {
-            cv::Point2f diff_pt = img_pts[i] - res_img_pts[i];
+        for (int j = 0; j < (int) img_pts.size(); ++j) {
+            cv::Point2f diff_pt = img_pts[j] - res_img_pts[j];
             if (std::fabs(diff_pt.x) < proj_th &&
                 std::fabs(diff_pt.y) < proj_th) {
                 cnt_inlier += 1;
-                cur_is_inlier[i] = true;
-                proj_error += diff_pt.x * diff_pt.x + diff_pt.y * diff_pt.y;
+                cur_is_inlier[j] = true;
+                proj_error +=
+                        loss_fn(diff_pt.x * diff_pt.x + diff_pt.y * diff_pt.y);
             }
         }
         if (cnt_inlier > best_cnt_inliers ||
