@@ -24,10 +24,31 @@ namespace {
                                    const std::vector<cv::DMatch> &matches) {
     std::string title = std::to_string(frame1->get_id()) + " match " +
                         std::to_string(frame2->get_id());
-    cv::Mat outimg;
+    cv::Mat out_img;
     cv::drawMatches(frame1->image, frame1->get_keypoints(), frame2->image,
-                    frame2->get_keypoints(), matches, outimg);
-    cv::imshow(title, outimg);
+                    frame2->get_keypoints(), matches, out_img);
+    cv::imshow(title, out_img);
+    cv::waitKey(0);
+}
+
+[[maybe_unused]] void show_matches(const vo_ptr<Frame> &frame1,
+                                   const vo_ptr<Frame> &frame2,
+                                   const std::vector<ProjMatch> &proj_matches) {
+    std::string title = std::to_string(frame1->get_id()) +
+                        " projection match " + std::to_string(frame2->get_id());
+    std::vector<cv::DMatch> matches;
+    for (auto &proj_match : proj_matches) {
+        auto feature_set = proj_match.p_map_pt->get_feature_points();
+        for (auto &feat : feature_set) {
+            if (feat->frame->get_id() == frame1->get_id()) {
+                matches.emplace_back(feat->index, proj_match.index, 2.0);
+            }
+        }
+    }
+    cv::Mat out_img;
+    cv::drawMatches(frame1->image, frame1->get_keypoints(), frame2->image,
+                    frame2->get_keypoints(), matches, out_img);
+    cv::imshow(title, out_img);
     cv::waitKey(0);
 }
 
@@ -245,8 +266,8 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             old_matches.push_back(matches[i]);
             pt_coords.push_back(
                     ref_frame->get_map_pt(matches[i].queryIdx)->get_coord());
-            img_pts.push_back(
-                    curframe_->feature_points[matches[i].trainIdx]->keypoint.pt);
+            img_pts.push_back(curframe_->feature_points[matches[i].trainIdx]
+                                      ->keypoint.pt);
         }
     }
     log_debug_line("Match with frame " << ref_frame->get_id() << " "

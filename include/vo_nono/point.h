@@ -41,6 +41,9 @@ public:
     void unassociate_feature_point(const FeaturePoint* feat_point) {
         feature_points_.erase(feat_point);
     }
+    std::unordered_set<const FeaturePoint*> get_feature_points() {
+        return feature_points_;
+    }
 
 private:
     static vo_id_t map_point_id_cnt;

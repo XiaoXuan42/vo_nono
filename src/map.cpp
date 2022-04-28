@@ -123,6 +123,9 @@ void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
             filters_[i].set_information(
                     camera_, keyframe->feature_points[i]->keypoint.pt,
                     basic_var);
+        } else {
+            keyframe->feature_points[i]->map_point->associate_feature_point(
+                    keyframe->feature_points[i]);
         }
     }
     keyframe_ = keyframe;
