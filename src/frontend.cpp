@@ -114,7 +114,10 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         }
     } else if (state_ == State::Tracking) {
         if (tracking(image, t)) {
-            FrameMessage message(curframe_, track_matches_, b_new_keyframe_);
+            std::vector<cv::DMatch> tri_matches =
+                    ORBMatcher::filter_match_by_dis(keyframe_matches_, 64, 64,
+                                                    CNT_KEY_PTS);
+            FrameMessage message(curframe_, tri_matches, b_new_keyframe_);
             map_->insert_frame(message);
             if (b_new_keyframe_) {
                 keyframe_ = curframe_;

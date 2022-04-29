@@ -134,7 +134,7 @@ void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
 void LocalMap::insert_frame(const FrameMessage &message) {
     assert(map_->keyframes_.back() == keyframe_);
     curframe_ = message.frame;
-    triangulate_with_keyframe(message.match_with_keyframe, 0.1);
+    triangulate_with_keyframe(message.match_with_keyframe, 0.05);
 }
 
 void LocalMap::initialize(const vo_ptr<Frame> &keyframe,
