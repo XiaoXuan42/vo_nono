@@ -28,9 +28,9 @@ public:
 
     void get_image(const cv::Mat &image, double t);
 
-    static void detect_and_compute(const cv::Mat &image,
-                                   std::vector<cv::KeyPoint> &kpts,
-                                   cv::Mat &dscpts, int nfeatures);
+    void detect_and_compute(const cv::Mat &image,
+                            std::vector<cv::KeyPoint> &kpts, cv::Mat &dscpts,
+                            int nfeatures);
 
     [[nodiscard]] State get_state() const { return state_; }
 

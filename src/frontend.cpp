@@ -21,6 +21,13 @@ void Frontend::detect_and_compute(const cv::Mat &image,
                                   cv::Mat &dscpts, int nfeatures) {
     cv::Ptr orb_detector = cv::ORB::create(nfeatures, 1.2f);
     orb_detector->detectAndCompute(image, cv::Mat(), kpts, dscpts);
+    // undistort keypoints
+    std::vector<cv::Point2f> pts, res_pts;
+    for (auto &kpt : kpts) { pts.push_back(kpt.pt); }
+    cv::undistortPoints(pts, res_pts, camera_.get_intrinsic_mat(),
+                        camera_.get_dist_coeff(), cv::noArray(),
+                        camera_.get_intrinsic_mat());
+    for (int i = 0; i < int(kpts.size()); ++i) { kpts[i].pt = res_pts[i]; }
 }
 
 void Frontend::get_image(const cv::Mat &image, double t) {
