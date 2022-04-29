@@ -54,7 +54,7 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
         pts2.push_back(curframe_->feature_points[match.trainIdx]->keypoint.pt);
     }
     ORBMatcher::filter_match_by_ess(ess, camera_.get_intrinsic_mat(), pts1,
-                                    pts2, 0.01, mask);
+                                    pts2, 0.1, mask);
     valid_match = filter_by_mask(matches, mask);
 
     std::vector<bool> tri_inliers;
@@ -134,7 +134,7 @@ void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
 void LocalMap::insert_frame(const FrameMessage &message) {
     assert(map_->keyframes_.back() == keyframe_);
     curframe_ = message.frame;
-    triangulate_with_keyframe(message.match_with_keyframe, 0.05);
+    triangulate_with_keyframe(message.match_with_keyframe, 0.1);
 }
 
 void LocalMap::initialize(const vo_ptr<Frame> &keyframe,

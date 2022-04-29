@@ -62,7 +62,7 @@ private:
 private:
     static constexpr int CNT_INIT_MATCHES = 500;
     static constexpr int CNT_KEY_PTS = 1000;
-    static constexpr int CNT_MATCHES = 200;
+    static constexpr int CNT_MATCHES = 500;
     static constexpr int CNT_MATCH_MIN_MATCHES = 30;
     static constexpr int CNT_TRACKING_MIN_MATCHES = 30;
 
