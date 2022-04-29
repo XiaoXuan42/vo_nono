@@ -213,7 +213,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
 
     keyframe_matches_ =
             matcher_->match_descriptor_bf(keyframe_->get_descriptors());
-    track_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 30,
+    track_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 64,
                                                      CNT_MATCHES);
     track_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
             track_matches_, keyframe_->get_keypoints(),
