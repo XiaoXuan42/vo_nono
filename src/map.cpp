@@ -107,8 +107,10 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
         }
     }
     log_debug_line("Triangulated " << cnt_new_tri << " new points.");
-    log_debug_line("Total filtered " << filter_total << " with " << filter_succ
-                                     << " succeeded.");
+    log_debug_line("Triangulate sigma condition check "
+                   << filter_total << " with " << filter_succ << " succeeded.");
+    log_debug_line("Frame " << curframe_->get_id() << " set "
+                            << curframe_->get_cnt_map_pt() << " points.");
 }
 
 void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {

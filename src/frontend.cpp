@@ -53,7 +53,8 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         }
     } else if (state_ == State::Tracking) {
         if (tracking(image, t)) {
-            FrameMessage message(curframe_, track_matches_, b_new_keyframe_);
+            need_new_keyframe();
+            FrameMessage message(curframe_, direct_matches_, b_new_keyframe_);
             map_->insert_frame(message);
             if (b_new_keyframe_) {
                 keyframe_ = curframe_;
@@ -139,8 +140,7 @@ int Frontend::initialize(const cv::Mat &image) {
     log_debug_line("Initialize with R: " << std::endl
                                          << Rcw << std::endl
                                          << "T: " << std::endl
-                                         << tcw << std::endl
-                                         << cnt_new_pt << " new map points.");
+                                         << tcw);
     return 0;
 }
 
@@ -152,35 +152,29 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
 
     keyframe_matches_ =
             matcher_->match_descriptor_bf(keyframe_->get_descriptors());
-    track_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 64,
-                                                     CNT_MATCHES);
-    track_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
-            track_matches_, keyframe_->get_keypoints(),
+    direct_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 64,
+                                                      CNT_MATCHES);
+    direct_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
+            direct_matches_, keyframe_->get_keypoints(),
             curframe_->get_keypoints(), 3);
 
-    int cnt_match = track_by_match(keyframe_, track_matches_, 6);
-    int cnt_proj_match = 0;
-    if (cnt_match < CNT_MATCH_MIN_MATCHES) {
+    cnt_inlier_direct_match_ = track_by_match(keyframe_, direct_matches_, 6);
+    cnt_inlier_proj_match_ = 0;
+    if (cnt_inlier_direct_match_ < CNT_MATCH_MIN_MATCHES) {
         auto local_points = map_->get_local_map_points();
-        cnt_proj_match = track_by_projection(local_points, 20, 10);
+        cnt_inlier_proj_match_ = track_by_projection(local_points, 20, 10);
     } else {
         b_match_good_ = true;
     }
-    if (std::max(cnt_proj_match, cnt_match) >= CNT_TRACKING_MIN_MATCHES) {
+    if (std::max(cnt_inlier_proj_match_, cnt_inlier_direct_match_) >=
+        CNT_TRACKING_MIN_MATCHES) {
         b_track_good_ = true;
-    }
-
-    if (!b_match_good_ && b_track_good_) {
-        if (double(cnt_match) < 0.2 * double(keyframe_->get_cnt_map_pt())) {
-            b_new_keyframe_ = true;
-        }
     }
 
     log_debug_line("Track good: " << b_track_good_);
     log_debug_line("Match good: " << b_match_good_);
-    log_debug_line("Match " << cnt_match << ". Project " << cnt_proj_match
-                            << ". Set " << curframe_->get_cnt_map_pt()
-                            << " map points.");
+    log_debug_line("Match " << cnt_inlier_direct_match_ << ". Project "
+                            << cnt_inlier_proj_match_);
     log_debug_line(curframe_->get_cnt_map_pt()
                    << ":\n"
                    << curframe_->get_Rcw() << std::endl
@@ -317,4 +311,18 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
     return cnt_proj_match;
 }
 
+void Frontend::need_new_keyframe() {
+    assert(!b_new_keyframe_);
+    if (!b_match_good_) {
+        if (double(cnt_inlier_direct_match_) <
+            0.2 * double(keyframe_->get_cnt_map_pt())) {
+            b_new_keyframe_ = true;
+        }
+    }
+    if (direct_matches_.size() < CNT_MATCHES &&
+        double(direct_matches_.size()) <
+                0.8 * double(keyframe_->get_cnt_map_pt())) {
+        b_new_keyframe_ = true;
+    }
+}
 }// namespace vo_nono

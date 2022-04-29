@@ -50,6 +50,8 @@ private:
         b_match_good_ = false;
         b_track_good_ = false;
         keyframe_matches_.clear();
+        cnt_inlier_direct_match_ = 0;
+        cnt_inlier_proj_match_ = 0;
     }
 
     int initialize(const cv::Mat &image);
@@ -58,6 +60,7 @@ private:
                        const std::vector<cv::DMatch> &matches, float ransac_th);
     int track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
                             float r_th, float ransac_th);
+    void need_new_keyframe();
 
 private:
     static constexpr int CNT_INIT_MATCHES = 500;
@@ -76,7 +79,7 @@ private:
 
     std::vector<cv::DMatch> keyframe_matches_;
     std::vector<cv::DMatch> init_matches_;
-    std::vector<cv::DMatch> track_matches_;
+    std::vector<cv::DMatch> direct_matches_;
     std::unordered_map<vo_ptr<MapPoint>, int> points_seen_;
 
     vo_ptr<Map> map_;
@@ -86,6 +89,8 @@ private:
 
     bool b_track_good_ = false;
     bool b_match_good_ = false;
+    int cnt_inlier_direct_match_ = 0;
+    int cnt_inlier_proj_match_ = 0;
 };
 }// namespace vo_nono
 
