@@ -60,7 +60,7 @@ namespace {
         auto pt = frame->feature_points[i]->keypoint.pt;
         if (frame->is_index_set(i)) {
             cnt += 1;
-            if (cnt > 10) { break; }
+            if (cnt > 100) { break; }
             cv::Mat coord = frame->get_map_pt(i)->get_coord();
             std::string annotate = "(" + std::to_string(coord.at<float>(0)) +
                                    ", " + std::to_string(coord.at<float>(1)) +
@@ -225,7 +225,8 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     int cnt_match = track_by_match(keyframe_, track_matches_, 6);
     int cnt_proj_match = 0;
     if (cnt_match < CNT_MATCH_MIN_MATCHES) {
-        cnt_proj_match = track_by_projection_local_map();
+        auto local_points = map_->get_local_map_points();
+        cnt_proj_match = track_by_projection(local_points, 20, 10);
     } else {
         b_match_good_ = true;
     }
@@ -378,17 +379,6 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
                                           << " projection with "
                                           << cnt_proj_match << " map points.");
     return cnt_proj_match;
-}
-
-int Frontend::track_by_projection_frame(const vo_ptr<Frame> &ref_frame) {
-    std::vector<vo_ptr<MapPoint>> points = ref_frame->get_all_map_pts();
-    int proj_res = track_by_projection(points, 30, 2);
-    return proj_res;
-}
-
-int Frontend::track_by_projection_local_map() {
-    std::vector<vo_ptr<MapPoint>> local_pts = map_->get_local_map_points();
-    return track_by_projection(local_pts, 20, 15);
 }
 
 }// namespace vo_nono
