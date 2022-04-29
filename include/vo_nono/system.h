@@ -11,6 +11,7 @@ namespace vo_nono {
 struct SystemConfig {
     FrontendConfig frontend_config;
     Camera camera;
+    std::string voc_path;
 };
 
 class System {
@@ -18,7 +19,7 @@ public:
     explicit System(const SystemConfig& config)
         : config_(config),
           camera_(config.camera),
-          map_(std::make_shared<Map>(camera_)),
+          map_(std::make_shared<Map>(camera_, config.voc_path.c_str())),
           frontend_(config.frontend_config, camera_, map_) {}
 
     void get_image(const cv::Mat& image, double t);

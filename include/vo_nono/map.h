@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "vo_nono/frame.h"
+#include "vo_nono/keypoint/bow.h"
 #include "vo_nono/keypoint/triangulate.h"
 #include "vo_nono/point.h"
 #include "vo_nono/util/geometry.h"
@@ -96,8 +97,9 @@ private:
 
 class Map {
 public:
-    explicit Map(Camera camera)
+    explicit Map(Camera camera, const char *voc_path)
         : camera_(std::move(camera)),
+          bow_database_(voc_path),
           local_map_(new LocalMap(this)),
           b_shutdown_(false),
           b_global_ba_(false) {
@@ -180,6 +182,7 @@ private:
     void _global_bundle_adjustment(std::unique_lock<std::mutex> &lock);
 
     const Camera camera_;
+    BowDataBase bow_database_;
     vo_uptr<LocalMap> local_map_;
     std::vector<vo_ptr<Frame>> keyframes_;
     std::vector<vo_ptr<Frame>> frames_;

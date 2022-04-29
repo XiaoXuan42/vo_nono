@@ -36,6 +36,9 @@ SystemConfig sysconf_from_yaml_node(const YAML::Node &node) {
         res.frontend_config = frontend_config_from_yaml_node(node["frontend"]);
     }
     if (node["Camera"]) { res.camera = camera_from_yaml_node(node["Camera"]); }
+    if (node["vocabulary"]) {
+        res.voc_path = node["vocabulary"].as<std::string>();
+    }
     return res;
 }
 }// namespace

@@ -18,7 +18,7 @@ find_package(Sophus REQUIRED)
 find_package(Threads REQUIRED)
 
 # vo_nono
-add_library(vo_nono SHARED include/vo_nono/system.h src/system.cpp src/frontend.cpp include/vo_nono/frontend.h include/vo_nono/types.h src/frame.cpp include/vo_nono/frame.h include/vo_nono/camera.h include/vo_nono/map.h include/vo_nono/point.h src/point.cpp include/vo_nono/config.h src/config.cpp src/motion.cpp include/vo_nono/pnp.h src/pnp.cpp include/vo_nono/keypoint/match.h src/match.cpp include/vo_nono/util/geometry.h include/vo_nono/optimize_graph.h src/optimize_graph.cpp src/map.cpp include/vo_nono/keypoint/triangulate.h src/triangulate.cpp include/vo_nono/keypoint/epipolar.h include/vo_nono/util/queue.h include/vo_nono/util/histogram.h include/vo_nono/util/macro.h include/vo_nono/util/rand.h include/vo_nono/util/util.h include/vo_nono/util/constants.h)
+add_library(vo_nono SHARED include/vo_nono/system.h src/system.cpp src/frontend.cpp include/vo_nono/frontend.h include/vo_nono/types.h src/frame.cpp include/vo_nono/frame.h include/vo_nono/camera.h include/vo_nono/map.h include/vo_nono/point.h src/point.cpp include/vo_nono/config.h src/config.cpp src/motion.cpp include/vo_nono/pnp.h src/pnp.cpp include/vo_nono/keypoint/match.h src/match.cpp include/vo_nono/util/geometry.h include/vo_nono/optimize_graph.h src/optimize_graph.cpp src/map.cpp include/vo_nono/keypoint/triangulate.h src/triangulate.cpp include/vo_nono/keypoint/epipolar.h include/vo_nono/util/queue.h include/vo_nono/util/histogram.h include/vo_nono/util/macro.h include/vo_nono/util/rand.h include/vo_nono/util/util.h include/vo_nono/util/constants.h include/vo_nono/keypoint/bow.h)
 target_compile_options(vo_nono PRIVATE -Wall -Werror)
 target_include_directories(vo_nono PUBLIC include/)
 target_link_libraries(vo_nono ${OpenCV_LIBS})
@@ -27,3 +27,7 @@ target_link_libraries(vo_nono Threads::Threads)
 target_link_libraries(vo_nono ${CERES_LIBRARIES})
 
 add_subdirectory(app)
+set(FBOW_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/third_party/DBow3/src/)
+set(FBOW_LIB_PATH ${PROJECT_SOURCE_DIR}/third_party/DBow3/build/src/libDBoW3.so)
+target_link_libraries(vo_nono ${FBOW_LIB_PATH})
+target_include_directories(vo_nono PUBLIC ${FBOW_INCLUDE_DIR})
