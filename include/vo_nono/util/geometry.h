@@ -7,12 +7,12 @@ namespace vo_nono {
 class Geometry {
 public:
     static cv::Mat get_proj_mat(const cv::Mat &camera_intrin,
-                                const cv::Mat &Rcw, const cv::Mat &t_cw) {
+                                const cv::Mat &Rcw, const cv::Mat &tcw) {
         assert(Rcw.type() == CV_32F);
-        assert(t_cw.type() == CV_32F);
+        assert(tcw.type() == CV_32F);
         cv::Mat proj = cv::Mat::zeros(3, 4, CV_32F);
         Rcw.copyTo(proj.rowRange(0, 3).colRange(0, 3));
-        t_cw.copyTo(proj.rowRange(0, 3).col(3));
+        tcw.copyTo(proj.rowRange(0, 3).col(3));
         proj = camera_intrin * proj;
         return proj;
     }
