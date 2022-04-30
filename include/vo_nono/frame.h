@@ -138,6 +138,9 @@ public:
 
     [[nodiscard]] vo_id_t get_id() const { return id_; }
     [[nodiscard]] double get_time() const { return time_; }
+    [[nodiscard]] cv::Point2f get_pixel_pt(int index) const {
+        return feature_points[index]->keypoint.pt;
+    }
 
     std::vector<FeaturePoint *> feature_points;
 

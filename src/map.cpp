@@ -64,53 +64,47 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
             valid_match, tri_results, tri_inliers, 10000);
 
     assert(valid_match.size() == tri_inliers.size());
-    int cnt_new_tri = 0;
-    int filter_succ = 0, filter_total = 0;
+    cv::Mat proj_mat =
+            Geometry::get_proj_mat(camera_.get_intrinsic_mat(),
+                                   curframe_->get_Rcw(), curframe_->get_Tcw());
     for (int i = 0; i < int(tri_inliers.size()); ++i) {
-        if (tri_inliers[i] &&
-            !curframe_->is_index_set(valid_match[i].trainIdx) &&
-            own_point_[valid_match[i].queryIdx]) {
-            vo_ptr<MapPoint> target_pt;
-
-            int keyframe_index = valid_match[i].queryIdx;
-            if (filters_[keyframe_index].filter(
-                        keyframe_->get_Tcw(), keyframe_->get_Rcw(),
-                        curframe_->get_Tcw(), tri_results[i])) {
-                filter_succ += 1;
-            }
-            filter_total += 1;
+        int keyframe_index = valid_match[i].queryIdx;
+        vo_ptr<MapPoint> target_pt;
+        if (tri_inliers[i] && own_point_[keyframe_index]) {
+            filters_[keyframe_index].filter(
+                    keyframe_->get_Tcw(), keyframe_->get_Rcw(),
+                    curframe_->get_Tcw(), tri_results[i]);
             if (keyframe_->is_index_set(keyframe_index)) {
                 target_pt = keyframe_->get_map_pt(keyframe_index);
                 target_pt->set_coord(filters_[keyframe_index].get_coord(
                         keyframe_->get_Tcw(), keyframe_->get_Rcw()));
-            } else {
-                if (filters_[keyframe_index].relative_error_less(th)) {
-                    target_pt = std::make_shared<MapPoint>(
-                            MapPoint::create_map_point(
-                                    filters_[keyframe_index].get_coord(
-                                            keyframe_->get_Tcw(),
-                                            keyframe_->get_Rcw()),
-                                    keyframe_->feature_points[keyframe_index]
-                                            ->descriptor,
-                                    keyframe_->feature_points[keyframe_index]
-                                            ->keypoint.octave));
-                    target_pt->associate_feature_point(
-                            keyframe_->feature_points[keyframe_index]);
-                    keyframe_->set_map_pt(keyframe_index, target_pt);
-                    cnt_new_tri += 1;
-                }
+            } else if (filters_[keyframe_index].relative_error_less(th)) {
+                target_pt =
+                        std::make_shared<MapPoint>(MapPoint::create_map_point(
+                                filters_[keyframe_index].get_coord(
+                                        keyframe_->get_Tcw(),
+                                        keyframe_->get_Rcw()),
+                                keyframe_->feature_points[keyframe_index]
+                                        ->descriptor,
+                                keyframe_->feature_points[keyframe_index]
+                                        ->keypoint.octave));
+                target_pt->associate_feature_point(
+                        keyframe_->feature_points[keyframe_index]);
+                keyframe_->set_map_pt(keyframe_index, target_pt);
             }
-
-            if (target_pt) {
+        }
+        if (!target_pt && keyframe_->is_index_set(keyframe_index)) {
+            target_pt = keyframe_->get_map_pt(keyframe_index);
+        }
+        if (target_pt) {
+            double err2 = Geometry::reprojection_err2(
+                    proj_mat, target_pt->get_coord(),
+                    curframe_->get_pixel_pt(valid_match[i].trainIdx));
+            if (err2 < chi2_2_5) {
                 curframe_->set_map_pt(valid_match[i].trainIdx, target_pt);
             }
         }
     }
-    log_debug_line("Triangulated " << cnt_new_tri << " new points.");
-    log_debug_line("Triangulate sigma condition check "
-                   << filter_total << " with " << filter_succ << " succeeded.");
-    log_debug_line("Frame " << curframe_->get_id() << " set "
-                            << curframe_->get_cnt_map_pt() << " points.");
 }
 
 void LocalMap::set_keyframe(const vo_ptr<Frame> &keyframe) {
