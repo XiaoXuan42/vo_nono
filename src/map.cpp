@@ -54,14 +54,14 @@ void LocalMap::triangulate_with_keyframe(const std::vector<cv::DMatch> &matches,
         pts2.push_back(curframe_->feature_points[match.trainIdx]->keypoint.pt);
     }
     ORBMatcher::filter_match_by_ess(ess, camera_.get_intrinsic_mat(), pts1,
-                                    pts2, 0.1, mask);
+                                    pts2, 0.01, mask);
     valid_match = filter_by_mask(matches, mask);
 
     std::vector<bool> tri_inliers;
     std::vector<cv::Mat> tri_results;
     Triangulator::triangulate_and_filter_frames(
             keyframe_.get(), curframe_.get(), camera_.get_intrinsic_mat(),
-            valid_match, tri_results, tri_inliers, 10000);
+            valid_match, tri_results, tri_inliers, 1000);
 
     assert(valid_match.size() == tri_inliers.size());
     cv::Mat proj_mat =
