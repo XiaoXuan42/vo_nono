@@ -19,7 +19,7 @@ public:
 
 private:
     Eigen::Vector3f t_[2];
-    Eigen::Quaternionf q_[2];
+    Eigen::Quaterniond q_[2];
     double time_[2]{};
     int cur_;
     int inform_cnt_;

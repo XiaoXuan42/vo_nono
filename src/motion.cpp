@@ -15,10 +15,12 @@ void MotionPredictor::inform_pose(const cv::Mat& new_Rcw,
     assert(new_Rcw.type() == CV_32F);
     assert(new_Rcw.cols == 3);
     assert(new_Rcw.rows == 3);
+    cv::Mat Rcw64;
+    new_Rcw.convertTo(Rcw64, CV_64F);
     cv::cv2eigen(new_tcw, t_[cur_]);
-    Eigen::Matrix3f rcw;
+    Eigen::Matrix3d rcw;
     cv::cv2eigen(new_Rcw, rcw);
-    q_[cur_] = Eigen::Quaternionf(rcw);
+    q_[cur_] = Eigen::Quaterniond(rcw);
     q_[cur_].normalize();
     time_[cur_] = time;
     cur_ ^= 1;
@@ -42,9 +44,9 @@ void MotionPredictor::predict_pose(double time, cv::Mat& Rcw,
     assert(tcw.rows == 3);
 
     // slerp
-    Eigen::Quaternionf predict_q;
+    Eigen::Quaterniond predict_q;
     auto q1 = q_[other], q2 = q_[cur];
-    double ang = acos(q_[other].dot(q_[cur]));
+    double ang = acos(std::min(q_[other].dot(q_[cur]), 1.0));
     if (ang < 0.001) {
         predict_q.coeffs() = q2.coeffs() * c1 + q1.coeffs() * c2;
     } else {
@@ -55,6 +57,7 @@ void MotionPredictor::predict_pose(double time, cv::Mat& Rcw,
     predict_q.normalize();
     auto predict_rcw = predict_q.toRotationMatrix();
     cv::eigen2cv(predict_rcw, Rcw);
+    Rcw.convertTo(Rcw, CV_32F);
     assert(Rcw.type() == CV_32F);
     assert(Rcw.cols == 3);
     assert(Rcw.rows == 3);

@@ -79,7 +79,7 @@ private:
 
 private:
     static constexpr int CNT_KEYPTS = 1000;
-    static constexpr int CNT_MATCHES = 500;
+    static constexpr int CNT_MATCHES = 1000;
     static constexpr int CNT_TRACK_MIN_MATCHES = 30;
 
     FrontendConfig config_;

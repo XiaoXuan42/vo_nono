@@ -209,6 +209,8 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
     }
     if (old_matches.size() < 10) { return int(old_matches.size()); }
 
+    log_debug_line("Total match: " << matches.size());
+    log_debug_line("Old match: " << old_matches.size());
     int cnt_inlier = 0;
     std::vector<bool> inliers;
     std::vector<cv::Matx31f> inlier_coords;
@@ -217,6 +219,7 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
     PnP::pnp_ransac(pt_coords, img_pts, camera_, 100, ransac_th, Rcw, tcw,
                     inliers);
 
+    log_debug_line("Old match after pnp: " << old_matches.size());
     for (int i = 0; i < (int) old_matches.size(); ++i) {
         if (inliers[i] && !curframe_->is_index_set(old_matches[i].trainIdx)) {
             cnt_inlier += 1;
@@ -305,7 +308,7 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
 void Frontend::new_keyframe() {
     assert(!b_new_keyframe_);
     if (curframe_->get_id() > keyframe_->get_id() + 5) {
-        b_new_keyframe_ = true;
+        //_set_keyframe(curframe_);
     }
     return;
     if (!b_match_good_ && b_track_good_) {
@@ -322,16 +325,17 @@ void Frontend::new_keyframe() {
 }
 
 void Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {
-    std::vector<cv::DMatch> tri_matches = filter_match(matches, 0.01);
+    std::vector<cv::DMatch> valid_matches = filter_match(matches, 0.01);
+    std::vector<cv::DMatch> tri_matches;
     std::vector<bool> tri_inliers;
     std::vector<cv::Mat> tri_results;
     Triangulator::triangulate_and_filter_frames(
             keyframe_.get(), curframe_.get(), camera_.get_intrinsic_mat(),
-            tri_matches, tri_results, tri_inliers, 1000);
-    tri_matches = filter_by_mask(tri_matches, tri_inliers);
+            valid_matches, tri_results, tri_inliers, 1000);
+    tri_matches = filter_by_mask(valid_matches, tri_inliers);
     tri_results = filter_by_mask(tri_results, tri_inliers);
     _update_points_location(tri_results, tri_matches);
-    _associate_points(tri_matches, 0.1);
+    _associate_points(valid_matches, 0.1);
 }
 
 std::vector<cv::DMatch> Frontend::filter_match(
@@ -390,9 +394,6 @@ void Frontend::_associate_points(const std::vector<cv::DMatch> &matches,
                 new_pt->associate_feature_point(
                         keyframe_->feature_points[keyframe_index]);
                 keyframe_->set_map_pt(keyframe_index, new_pt);
-                if (!curframe_->is_index_set(curframe_index)) {
-                    curframe_->set_map_pt(curframe_index, new_pt);
-                }
             }
         }
         if (keyframe_->is_index_set(keyframe_index) &&
@@ -425,5 +426,6 @@ void Frontend::_set_keyframe(const vo_ptr<Frame> &keyframe) {
         }
     }
     local_map_.local_frames.push_back(keyframe);
+    keyframe_ = keyframe;
 }
 }// namespace vo_nono
