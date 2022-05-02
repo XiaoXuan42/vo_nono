@@ -306,22 +306,19 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
 }
 
 void Frontend::new_keyframe() {
-    assert(!b_new_keyframe_);
-    if (curframe_->get_id() > keyframe_->get_id() + 5) {
-        //_set_keyframe(curframe_);
-    }
-    return;
-    if (!b_match_good_ && b_track_good_) {
-        if (double(cnt_inlier_direct_match_) <
-            0.2 * double(keyframe_->get_cnt_map_pt())) {
-            //b_new_keyframe_ = true;
-        }
-    }
-    if (direct_matches_.size() < CNT_MATCHES &&
-        double(direct_matches_.size()) <
-                0.8 * double(keyframe_->get_cnt_map_pt())) {
-        b_new_keyframe_ = true;
-    }
+    bool is_keyframe = false;
+    if (is_keyframe) { _set_keyframe(curframe_); }
+    //    if (!b_match_good_ && b_track_good_) {
+    //        if (double(cnt_inlier_direct_match_) <
+    //            0.2 * double(keyframe_->get_cnt_map_pt())) {
+    //            //b_new_keyframe_ = true;
+    //        }
+    //    }
+    //    if (direct_matches_.size() < CNT_MATCHES &&
+    //        double(direct_matches_.size()) <
+    //                0.8 * double(keyframe_->get_cnt_map_pt())) {
+    //        b_new_keyframe_ = true;
+    //    }
 }
 
 void Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {

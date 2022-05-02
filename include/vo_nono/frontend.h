@@ -47,7 +47,6 @@ public:
 
 private:
     void reset_state() {
-        b_new_keyframe_ = false;
         b_match_good_ = false;
         b_track_good_ = false;
         keyframe_matches_.clear();
@@ -98,7 +97,6 @@ private:
     vo_ptr<Map> map_;
 
     MotionPredictor motion_pred_;
-    bool b_new_keyframe_ = false;
 
     bool b_track_good_ = false;
     bool b_match_good_ = false;

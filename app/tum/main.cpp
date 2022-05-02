@@ -51,7 +51,7 @@ int main(int argc, const char *argv[]) {
                      "----"
                   << std::endl;
         frame_id += 1;
-        if (frame_id >= 60) { break; }
+        if (frame_id >= 70) { break; }
     }
 
     if (argc >= 4) {
