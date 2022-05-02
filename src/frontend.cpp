@@ -328,7 +328,7 @@ void Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {
     std::vector<cv::Mat> tri_results;
     Triangulator::triangulate_and_filter_frames(
             keyframe_.get(), curframe_.get(), camera_.get_intrinsic_mat(),
-            valid_matches, tri_results, tri_inliers, 1000000000);
+            valid_matches, tri_results, tri_inliers, 1000);
     tri_matches = filter_by_mask(valid_matches, tri_inliers);
     tri_results = filter_by_mask(tri_results, tri_inliers);
     _update_points_location(tri_results, tri_matches);
@@ -358,16 +358,22 @@ std::vector<cv::DMatch> Frontend::filter_match(
 void Frontend::_update_points_location(const std::vector<cv::Mat> &tri_res,
                                        const std::vector<cv::DMatch> &matches) {
     assert(tri_res.size() == matches.size());
+    cv::Mat cur_proj_mat =
+            Geometry::get_proj_mat(camera_.get_intrinsic_mat(),
+                                   curframe_->get_Rcw(), curframe_->get_Tcw());
     for (int i = 0; i < int(matches.size()); ++i) {
         int keyframe_index = matches[i].queryIdx;
+        int curframe_index = matches[i].trainIdx;
         if (local_map_.own_points[keyframe_index]) {
             auto &filter = local_map_.filters[keyframe_index];
             filter.filter(keyframe_->get_Tcw(), keyframe_->get_Rcw(),
                           curframe_->get_Tcw(), tri_res[i]);
+            _add_observation(curframe_->get_Rcw(), curframe_->get_Tcw(),
+                             curframe_->get_pixel_pt(curframe_index),
+                             keyframe_index);
+            cv::Mat new_coord = _get_local_map_point_coord(keyframe_index);
             if (keyframe_->is_index_set(keyframe_index)) {
-                keyframe_->get_map_pt(keyframe_index)
-                        ->set_coord(filter.get_coord(keyframe_->get_Tcw(),
-                                                     keyframe_->get_Rcw()));
+                keyframe_->get_map_pt(keyframe_index)->set_coord(new_coord);
             }
         }
     }
@@ -384,11 +390,10 @@ void Frontend::_associate_points(const std::vector<cv::DMatch> &matches,
         if (!keyframe_->is_index_set(keyframe_index)) {
             if (local_map_.filters[keyframe_index].relative_error_less(
                         rel_th)) {
+                cv::Mat coord = _get_local_map_point_coord(keyframe_index);
                 auto new_pt =
                         std::make_shared<MapPoint>(MapPoint::create_map_point(
-                                local_map_.filters[keyframe_index].get_coord(
-                                        keyframe_->get_Tcw(),
-                                        keyframe_->get_Rcw()),
+                                coord,
                                 keyframe_->feature_points[keyframe_index]
                                         ->descriptor,
                                 keyframe_->feature_points[keyframe_index]
@@ -411,23 +416,54 @@ void Frontend::_associate_points(const std::vector<cv::DMatch> &matches,
 
 void Frontend::_set_keyframe(const vo_ptr<Frame> &keyframe) {
     local_map_.local_frames.clear();
+    local_map_.tri_mats.clear();
+    local_map_.tri_mats.resize(keyframe->feature_points.size());
     local_map_.filters.clear();
     local_map_.filters.resize(keyframe->feature_points.size());
     local_map_.own_points = std::vector(keyframe->feature_points.size(), false);
+
     double basic_var = std::min(camera_.fx(), camera_.fy());
     basic_var = 1.0 / (basic_var * basic_var);
-    for (size_t i = 0; i < keyframe->feature_points.size(); ++i) {
-        if (!keyframe->is_index_set(int(i))) {
+    for (int i = 0; i < (int) keyframe->feature_points.size(); ++i) {
+        if (!keyframe->is_index_set(i)) {
             local_map_.own_points[i] = true;
             local_map_.filters[i].set_information(
                     camera_, keyframe->feature_points[i]->keypoint.pt,
                     basic_var);
+            _add_observation(keyframe->get_Rcw(), keyframe->get_Tcw(),
+                             keyframe->get_pixel_pt(i), i);
         } else {
-            keyframe->get_map_pt(int(i))->associate_feature_point(
+            keyframe->get_map_pt(i)->associate_feature_point(
                     keyframe->feature_points[i]);
         }
     }
+
     local_map_.local_frames.push_back(keyframe);
     keyframe_ = keyframe;
+}
+
+cv::Mat Frontend::_get_local_map_point_coord(int index) {
+    cv::Mat mat = local_map_.tri_mats[index].clone();
+    cv::Mat U, Vt, w;
+    cv::SVDecomp(mat, w, U, Vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
+    cv::Mat coord = Vt.row(3).t();
+    return Geometry::hm3d_to_euclid3d(coord);
+}
+
+void Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
+                                const cv::Point2f &pixel, int index) {
+    cv::Mat proj_mat =
+            Geometry::get_proj_mat(camera_.get_intrinsic_mat(), Rcw, tcw);
+    int origin_row = local_map_.tri_mats[index].rows;
+    cv::Mat updated_tri_mat = cv::Mat::zeros(origin_row + 2, 4, CV_32F);
+    if (origin_row > 0) {
+        local_map_.tri_mats[index].copyTo(
+                updated_tri_mat.rowRange(0, origin_row));
+    }
+    cv::Mat r1 = proj_mat.row(1) - pixel.y * proj_mat.row(2);
+    cv::Mat r2 = proj_mat.row(0) - pixel.x * proj_mat.row(2);
+    r1.copyTo(updated_tri_mat.row(origin_row));
+    r2.copyTo(updated_tri_mat.row(origin_row + 1));
+    local_map_.tri_mats[index] = updated_tri_mat;
 }
 }// namespace vo_nono

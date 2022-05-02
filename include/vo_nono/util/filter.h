@@ -1,8 +1,9 @@
 #ifndef VO_NONO_FILTER_H
 #define VO_NONO_FILTER_H
 
-#include "vo_nono/camera.h"
 #include <opencv2/core.hpp>
+
+#include "vo_nono/camera.h"
 
 namespace vo_nono {
 class InvDepthFilter {
@@ -15,6 +16,7 @@ public:
                                     const cv::Mat &Rcw) const {
         return -o_cw + Rcw.t() * dir_ / mean_;
     }
+    [[nodiscard]] double get_mean() const { return mean_; }
     [[nodiscard]] int get_cnt() const { return cnt_; }
     void set_information(const Camera &camera, const cv::Point2f pt,
                          double basic_var) {
@@ -44,5 +46,5 @@ private:
     double basic_var_ = 1;
     cv::Mat dir_;
 };
-}
+}// namespace vo_nono
 #endif//VO_NONO_FILTER_H

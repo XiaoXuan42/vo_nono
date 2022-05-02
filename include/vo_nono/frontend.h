@@ -75,6 +75,9 @@ private:
         local_map_.local_frames.push_back(frame);
         map_->insert_frame(frame);
     }
+    cv::Mat _get_local_map_point_coord(int index);
+    void _add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
+                             const cv::Point2f &pixel, int index);
 
 private:
     static constexpr int CNT_KEYPTS = 1000;
@@ -106,6 +109,7 @@ private:
 private:
     struct LocalMap {
         std::vector<InvDepthFilter> filters;
+        std::vector<cv::Mat> tri_mats;
         std::vector<bool> own_points;
         std::list<vo_ptr<Frame>> local_frames;
     };
