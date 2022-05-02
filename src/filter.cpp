@@ -15,6 +15,7 @@ bool InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
     double cur_d = 1.0 / std::sqrt(t0_square);
 
     if (cnt_ >= 3 && std::abs(cur_d - mean_) > 2 * sqrt_var_) { return false; }
+    if (!std::isfinite(cur_var) || !std::isfinite(cur_d)) { return false; }
 
     double update_mean = (var_ * cur_d + cur_var * mean_) / (cur_var + var_);
     double update_var = (var_ * cur_var) / (cur_var + var_);
@@ -27,4 +28,4 @@ bool InvDepthFilter::filter(const cv::Mat &o0_cw, const cv::Mat &Rcw0,
     cnt_ += 1;
     return true;
 }
-}
+}// namespace vo_nono

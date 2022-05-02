@@ -331,7 +331,7 @@ void Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {
     std::vector<cv::Mat> tri_results;
     Triangulator::triangulate_and_filter_frames(
             keyframe_.get(), curframe_.get(), camera_.get_intrinsic_mat(),
-            valid_matches, tri_results, tri_inliers, 1000);
+            valid_matches, tri_results, tri_inliers, 1000000000);
     tri_matches = filter_by_mask(valid_matches, tri_inliers);
     tri_results = filter_by_mask(tri_results, tri_inliers);
     _update_points_location(tri_results, tri_matches);
@@ -364,9 +364,14 @@ void Frontend::_update_points_location(const std::vector<cv::Mat> &tri_res,
     for (int i = 0; i < int(matches.size()); ++i) {
         int keyframe_index = matches[i].queryIdx;
         if (local_map_.own_points[keyframe_index]) {
-            local_map_.filters[keyframe_index].filter(
-                    keyframe_->get_Tcw(), keyframe_->get_Rcw(),
-                    curframe_->get_Tcw(), tri_res[i]);
+            auto &filter = local_map_.filters[keyframe_index];
+            filter.filter(keyframe_->get_Tcw(), keyframe_->get_Rcw(),
+                          curframe_->get_Tcw(), tri_res[i]);
+            if (keyframe_->is_index_set(keyframe_index)) {
+                keyframe_->get_map_pt(keyframe_index)
+                        ->set_coord(filter.get_coord(keyframe_->get_Tcw(),
+                                                     keyframe_->get_Rcw()));
+            }
         }
     }
 }
