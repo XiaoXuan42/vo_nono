@@ -80,6 +80,7 @@ void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
     int best_cnt_inliers = 0;
     double best_proj_error = std::numeric_limits<double>::max();
     cv::Mat best_rvec;
+    is_inlier = std::vector<bool>(img_pts.size(), false);
     auto loss_fn = [=](double loss) {
         if (loss <= th) {
             return loss;

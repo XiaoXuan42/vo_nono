@@ -217,8 +217,6 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
     cv::Mat Rcw = curframe_->get_Rcw(), tcw = curframe_->get_Tcw();
     PnP::pnp_ransac(pt_coords, img_pts, camera_, 100, ransac_th, Rcw, tcw,
                     inliers);
-
-    log_debug_line("Old match after pnp: " << old_matches.size());
     for (int i = 0; i < (int) old_matches.size(); ++i) {
         if (inliers[i] && !curframe_->is_index_set(old_matches[i].trainIdx)) {
             cnt_inlier += 1;
@@ -229,6 +227,7 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
     if (cnt_inlier < 10) { return int(cnt_inlier); }
 
     old_matches = filter_by_mask(old_matches, inliers);
+    log_debug_line("Old match after pnp: " << old_matches.size());
     pt_coords = filter_by_mask(pt_coords, inliers);
     img_pts = filter_by_mask(img_pts, inliers);
     inliers = PnP::pnp_by_optimize(pt_coords, img_pts, camera_, Rcw, tcw);
