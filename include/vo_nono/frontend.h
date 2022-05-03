@@ -58,7 +58,7 @@ private:
     bool tracking(const cv::Mat &image, double t);
     void tracking_with_keyframe();
     void relocalization();
-    int track_by_match(const vo_ptr<Frame> &ref_frame,
+    std::vector<bool> track_by_match(const vo_ptr<Frame> &ref_frame,
                        const std::vector<cv::DMatch> &matches, float ransac_th);
     int track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
                             float r_th, float ransac_th);
@@ -66,6 +66,7 @@ private:
     void triangulate_and_set(const std::vector<cv::DMatch> &matches);
     std::vector<cv::DMatch> filter_match(const std::vector<cv::DMatch> &matches,
                                          double epi_th);
+    std::vector<cv::DMatch> filter_match_cv(const std::vector<cv::DMatch> &matches, double epi_th);
     void _set_keyframe(const vo_ptr<Frame> &keyframe);
     void _update_points_location(const std::vector<cv::DMatch> &matches, double tri_grad_th);
     void _associate_points(const std::vector<cv::DMatch> &matches,
@@ -94,6 +95,7 @@ private:
     std::vector<cv::DMatch> keyframe_matches_;
     std::vector<cv::DMatch> init_matches_;
     std::vector<cv::DMatch> direct_matches_;
+    std::vector<bool> direct_match_inliers_;
     std::unordered_map<vo_ptr<MapPoint>, int> points_seen_;
 
     vo_ptr<Map> map_;

@@ -170,10 +170,9 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
     log_debug_line("Match good: " << b_match_good_);
     log_debug_line("Match " << cnt_inlier_direct_match_ << ". Project "
                             << cnt_inlier_proj_match_);
-    log_debug_line(curframe_->get_cnt_map_pt()
-                   << ":\n"
-                   << curframe_->get_Rcw() << std::endl
-                   << curframe_->get_Tcw() << std::endl);
+    log_debug_line("Set " << curframe_->get_cnt_map_pt() << " points:\n"
+                          << curframe_->get_Rcw() << std::endl
+                          << curframe_->get_Tcw() << std::endl);
     log_debug_line("Keyframe " << keyframe_->get_id() << " has "
                                << keyframe_->get_cnt_map_pt()
                                << " map points.");
@@ -186,19 +185,23 @@ void Frontend::tracking_with_keyframe() {
     direct_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
             direct_matches_, keyframe_->get_keypoints(),
             curframe_->get_keypoints(), 3);
-    cnt_inlier_direct_match_ = track_by_match(keyframe_, direct_matches_, 6);
+    direct_match_inliers_ = track_by_match(keyframe_, direct_matches_, 6);
+    assert(direct_match_inliers_.size() == direct_matches_.size());
+    cnt_inlier_direct_match_ = cnt_inliers_from_mask(direct_match_inliers_);
 }
 
 void Frontend::relocalization() {
     // case1: not enough (true) matches between keyframe and curframe.
 }
 
-int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
-                             const std::vector<cv::DMatch> &matches,
-                             float ransac_th) {
+std::vector<bool> Frontend::track_by_match(
+        const vo_ptr<Frame> &ref_frame, const std::vector<cv::DMatch> &matches,
+        float ransac_th) {
     std::vector<cv::Matx31f> pt_coords;
     std::vector<cv::Point2f> img_pts;
     std::vector<cv::DMatch> old_matches;
+    std::vector<bool> inliers1, inliers2;
+    std::vector<bool> cur_mask;
 
     for (int i = 0; i < int(matches.size()); ++i) {
         if (ref_frame->is_index_set(matches[i].queryIdx)) {
@@ -206,35 +209,40 @@ int Frontend::track_by_match(const vo_ptr<Frame> &ref_frame,
             pt_coords.push_back(
                     ref_frame->get_map_pt(matches[i].queryIdx)->get_coord());
             img_pts.push_back(curframe_->get_pixel_pt(matches[i].trainIdx));
+            cur_mask.push_back(true);
+        } else {
+            cur_mask.push_back(false);
         }
     }
-    if (old_matches.size() < 10) { return int(old_matches.size()); }
+    if (old_matches.size() < 10) { return cur_mask; }
 
     log_debug_line("Total match: " << matches.size());
     log_debug_line("Old match: " << old_matches.size());
     int cnt_inlier = 0;
-    std::vector<bool> inliers;
     cv::Mat Rcw = curframe_->get_Rcw(), tcw = curframe_->get_Tcw();
     PnP::pnp_ransac(pt_coords, img_pts, camera_, 100, ransac_th, Rcw, tcw,
-                    inliers);
+                    inliers1);
     for (int i = 0; i < (int) old_matches.size(); ++i) {
-        if (inliers[i] && !curframe_->is_index_set(old_matches[i].trainIdx)) {
+        if (inliers1[i] && !curframe_->is_index_set(old_matches[i].trainIdx)) {
             cnt_inlier += 1;
         } else {
-            inliers[i] = false;
+            inliers1[i] = false;
         }
     }
-    if (cnt_inlier < 10) { return int(cnt_inlier); }
+    cur_mask = mask_chaining(cur_mask, inliers1);
+    if (cnt_inlier < 10) { return cur_mask; }
 
-    old_matches = filter_by_mask(old_matches, inliers);
+    old_matches = filter_by_mask(old_matches, inliers1);
     log_debug_line("Old match after pnp: " << old_matches.size());
-    pt_coords = filter_by_mask(pt_coords, inliers);
-    img_pts = filter_by_mask(img_pts, inliers);
-    inliers = PnP::pnp_by_optimize(pt_coords, img_pts, camera_, Rcw, tcw);
+    pt_coords = filter_by_mask(pt_coords, inliers1);
+    img_pts = filter_by_mask(img_pts, inliers1);
+    inliers2 = PnP::pnp_by_optimize(pt_coords, img_pts, camera_, Rcw, tcw);
     curframe_->set_Rcw(Rcw);
     curframe_->set_Tcw(tcw);
-    log_debug_line("Match after optimize: " << cnt_inliers_from_mask(inliers));
-    return cnt_inliers_from_mask(inliers);
+    log_debug_line("Match after optimize: " << cnt_inliers_from_mask(inliers2));
+    cur_mask = mask_chaining(cur_mask, inliers2);
+    assert(cnt_inliers_from_mask(cur_mask) == cnt_inliers_from_mask(inliers2));
+    return cur_mask;
 }
 
 int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
@@ -335,6 +343,18 @@ std::vector<cv::DMatch> Frontend::filter_match(
                                     pts2, epi_th, mask);
     valid_match = filter_by_mask(matches, mask);
     return valid_match;
+}
+
+std::vector<cv::DMatch> Frontend::filter_match_cv(
+        const std::vector<cv::DMatch> &matches, double epi_th) {
+    std::vector<cv::Point2f> pt1, pt2;
+    for (auto &match : matches) {
+        pt1.push_back(keyframe_->get_pixel_pt(match.queryIdx));
+        pt2.push_back(curframe_->get_pixel_pt(match.trainIdx));
+    }
+    std::vector<unsigned char> mask;
+    cv::findFundamentalMat(pt1, pt2, cv::FM_RANSAC, 100, 0.999, epi_th, mask);
+    return filter_by_mask(matches, mask);
 }
 
 void Frontend::_update_points_location(const std::vector<cv::DMatch> &matches,

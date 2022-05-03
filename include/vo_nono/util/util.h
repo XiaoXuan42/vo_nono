@@ -25,6 +25,21 @@ template<typename T>
     }
     return cnt;
 }
+template<typename T>
+[[nodiscard]] inline std::vector<T> mask_chaining(const std::vector<T> &mask1,
+                                                  const std::vector<T> &mask2) {
+    assert(mask1.size() >= mask2.size());
+    int cur = 0;
+    std::vector<T> result = mask1;
+    for (int i = 0; i < (int) result.size(); ++i) {
+        if (mask1[i]) {
+            assert(cur < (int) mask2.size());
+            result[i] = mask2[cur];
+            cur += 1;
+        }
+    }
+    return result;
+}
 }// namespace vo_nono
 
 #endif

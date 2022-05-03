@@ -1,6 +1,6 @@
 #include <fstream>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 
 #include "tum.h"
 #include "vo_nono/config.h"
@@ -45,13 +45,13 @@ int main(int argc, const char *argv[]) {
                                                                           t1)
                         .count();
         std::cout << std::setiosflags(std::ios::fixed) << std::setprecision(6);
-        std::cout << "Frame " << frame_id << "(time_: " << cur_time << ") cost "
+        std::cout << "Frame " << frame_id << "(time: " << cur_time << ") cost "
                   << time_used << " seconds." << std::endl;
         std::cout << "---------------------------------------------------------"
                      "----"
                   << std::endl;
         frame_id += 1;
-        if (frame_id >= 80) { break; }
+        if (frame_id >= 60) { break; }
     }
 
     if (argc >= 4) {
