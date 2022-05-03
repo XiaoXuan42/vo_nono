@@ -170,6 +170,7 @@ std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
                                        cv::Mat& tcw) {
     std::vector<bool> is_inlier(coords.size(), true);
     constexpr double standard[4] = {chi2_2_5, chi2_2_5, chi2_2_5, chi2_2_5};
+    constexpr int max_iter[4] = {10, 10, 10, 40};
     for (int i = 0; i < 4; ++i) {
         OptimizeGraph graph(camera);
         graph.add_cam_pose(Rcw, tcw, false);
@@ -187,7 +188,7 @@ std::vector<bool> PnP::pnp_by_optimize(const std::vector<cv::Matx31f>& coords,
         options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
         options.use_nonmonotonic_steps = true;
         options.linear_solver_type = ceres::DENSE_SCHUR;
-        options.max_num_iterations = 10;
+        options.max_num_iterations = max_iter[i];
         graph.evaluate_solver(options);
         graph.get_cam_pose(0, Rcw, tcw);
 

@@ -2,6 +2,7 @@
 
 #include <iostream>
 
+#include "vo_nono/keypoint/epipolar.h"
 #include "vo_nono/util/geometry.h"
 #include "vo_nono/util/histogram.h"
 #include "vo_nono/util/util.h"
@@ -177,24 +178,11 @@ void ORBMatcher::filter_match_by_ess(const cv::Mat &Ess,
                                      const std::vector<cv::Point2f> &pts2,
                                      double th, std::vector<bool> &mask) {
     assert(pts1.size() == pts2.size());
-    cv::Mat inv_cam_intrinsic = camera_intrinsic.inv();
-    cv::Mat l_mat = Ess * inv_cam_intrinsic;
     mask.resize(pts1.size(), true);
     for (int i = 0; i < int(pts1.size()); ++i) {
-        cv::Mat mat1 = cv::Mat::zeros(3, 1, CV_32F),
-                mat2 = cv::Mat::zeros(3, 1, CV_32F);
-        mat1.at<float>(0, 0) = pts1[i].x;
-        mat1.at<float>(1, 0) = pts1[i].y;
-        mat1.at<float>(2, 0) = 1.0f;
-        mat2.at<float>(0, 0) = pts2[i].x;
-        mat2.at<float>(1, 0) = pts2[i].y;
-        mat2.at<float>(2, 0) = 1.0f;
-        cv::Mat l = l_mat * mat1;
-        cv::Mat pt2 = inv_cam_intrinsic * mat2;
-        cv::Mat mat_res = pt2.t() * l;
-        double diff = std::abs(double(mat_res.at<float>(0)));
-        double l_norm = cv::norm(l);
-        if (diff > th * l_norm) { mask[i] = false; }
+        double dis = Epipolar::epipolar_line_dis(camera_intrinsic, Ess, pts1[i],
+                                                 pts2[i]);
+        if (dis > th) { mask[i] = false; }
     }
 }
 }// namespace vo_nono
