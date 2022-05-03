@@ -67,7 +67,7 @@ private:
     std::vector<cv::DMatch> filter_match(const std::vector<cv::DMatch> &matches,
                                          double epi_th);
     void _set_keyframe(const vo_ptr<Frame> &keyframe);
-    void _update_points_location(const std::vector<cv::DMatch> &matches);
+    void _update_points_location(const std::vector<cv::DMatch> &matches, double tri_grad_th);
     void _associate_points(const std::vector<cv::DMatch> &matches,
                            int least_obs);
     void insert_local_frame(const vo_ptr<Frame> &frame) {
@@ -76,7 +76,7 @@ private:
     }
     cv::Mat _get_local_map_point_coord(int index);
     void _add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
-                          const cv::Point2f &pixel, int index);
+                          const cv::Point2f &pixel, int index, double tri_grad_th);
 
 private:
     static constexpr int CNT_KEYPTS = 1000;

@@ -140,7 +140,7 @@ int Frontend::initialize(const cv::Mat &image) {
     init_matches_ = filter_by_mask(init_matches_, inliers);
     triangulate_result = filter_by_mask(triangulate_result, inliers);
     _set_keyframe(keyframe_);
-    _update_points_location(init_matches_);
+    _update_points_location(init_matches_, 1000);
     _associate_points(init_matches_, 2);
     return 0;
 }
@@ -313,7 +313,7 @@ void Frontend::new_keyframe() {
 
 void Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {
     std::vector<cv::DMatch> valid_matches = filter_match(matches, 6);
-    _update_points_location(valid_matches);
+    _update_points_location(valid_matches, 1000);
     _associate_points(valid_matches, 3);
 }
 
@@ -337,14 +337,15 @@ std::vector<cv::DMatch> Frontend::filter_match(
     return valid_match;
 }
 
-void Frontend::_update_points_location(const std::vector<cv::DMatch> &matches) {
+void Frontend::_update_points_location(const std::vector<cv::DMatch> &matches,
+                                       double tri_grad_th) {
     for (auto &match : matches) {
         int keyframe_index = match.queryIdx;
         int curframe_index = match.trainIdx;
         if (local_map_.own_points[keyframe_index]) {
             _add_observation(curframe_->get_Rcw(), curframe_->get_Tcw(),
                              curframe_->get_pixel_pt(curframe_index),
-                             keyframe_index);
+                             keyframe_index, tri_grad_th);
             if (keyframe_->is_index_set(keyframe_index)) {
                 keyframe_->get_map_pt(keyframe_index)
                         ->set_coord(_get_local_map_point_coord(keyframe_index));
@@ -404,7 +405,7 @@ void Frontend::_set_keyframe(const vo_ptr<Frame> &keyframe) {
             local_map_.point_infos[i].filter.set_information(
                     camera_, keyframe->get_pixel_pt(i), basic_var);
             _add_observation(keyframe->get_Rcw(), keyframe->get_Tcw(),
-                             keyframe->get_pixel_pt(i), i);
+                             keyframe->get_pixel_pt(i), i, 1000);
         } else {
             keyframe->get_map_pt(i)->associate_feature_point(
                     keyframe->feature_points[i]);
@@ -421,7 +422,8 @@ cv::Mat Frontend::_get_local_map_point_coord(int index) {
 }
 
 void Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
-                                const cv::Point2f &pixel, int index) {
+                                const cv::Point2f &pixel, int index,
+                                double tri_grad_th) {
     if (local_map_.point_infos[index].observations.empty()) {
         local_map_.point_infos[index].observations.emplace_back(Rcw, tcw,
                                                                 pixel);
@@ -442,7 +444,7 @@ void Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
     // parallax test
     if (Triangulator::is_triangulate_inlier(keyframe_->get_Rcw(),
                                             keyframe_->get_Tcw(), Rcw, tcw,
-                                            tri_res, 1000)) {
+                                            tri_res, tri_grad_th)) {
         // reprojection error test
         bool ok = true;
         for (auto &obs : local_map_.point_infos[index].observations) {
