@@ -3,8 +3,36 @@
 #include <opencv2/calib3d.hpp>
 
 #include "vo_nono/util/geometry.h"
+#include "vo_nono/util/util.h"
 
 namespace vo_nono {
+// triangulate one points given two observation
+cv::Mat Triangulator::triangulate(const cv::Mat& proj1, const cv::Mat& proj2,
+                                  const cv::Point2f& pixel1,
+                                  const cv::Point2f& pixel2) {
+    std::vector<cv::Mat> proj{proj1, proj2};
+    std::vector<cv::Point2f> pixels{pixel1, pixel2};
+    return triangulate(proj, pixels);
+}
+
+// triangulate one points given multiple observations
+cv::Mat Triangulator::triangulate(const std::vector<cv::Mat>& proj,
+                                  const std::vector<cv::Point2f>& pixels) {
+    assert(proj.size() == pixels.size());
+    cv::Mat A = cv::Mat::zeros(2 * (int) proj.size(), 4, CV_32F);
+    for (int i = 0; i < int(proj.size()); i++) {
+        cv::Mat r1 = proj[i].row(0) - pixels[i].x * proj[i].row(2);
+        cv::Mat r2 = proj[i].row(1) - pixels[i].y * proj[i].row(2);
+        r1.copyTo(A.row(i * 2));
+        r2.copyTo(A.row(i * 2 + 1));
+    }
+    cv::Mat U, w, Vt;
+    cv::SVDecomp(A, w, U, Vt);
+    cv::Mat res = Vt.row(3).t();
+    return Geometry::hm3d_to_euclid3d(res);
+}
+
+// triangulate multiple points given two frame
 void Triangulator::triangulate(const cv::Mat& proj1, const cv::Mat& proj2,
                                const std::vector<cv::Point2f>& img_pt1,
                                const std::vector<cv::Point2f>& img_pt2,
@@ -19,41 +47,41 @@ void Triangulator::triangulate(const cv::Mat& proj1, const cv::Mat& proj2,
     }
 }
 
+bool Triangulator::is_triangulate_inlier(
+        const cv::Mat& Rcw1, const cv::Mat& tcw1, const cv::Mat& Rcw2,
+        const cv::Mat& tcw2, const cv::Mat& tri_res, double grad_th) {
+    if (!std::isfinite(tri_res.at<float>(0, 0)) ||
+        !std::isfinite(tri_res.at<float>(1, 0)) ||
+        !std::isfinite(tri_res.at<float>(2, 0))) {
+        return false;
+    }
+    cv::Mat coord_c1 = Geometry::transform_coord(Rcw1, tcw1, tri_res);
+    cv::Mat coord_c2 = Geometry::transform_coord(Rcw2, tcw2, tri_res);
+    // depth must be positive
+    if (coord_c1.at<float>(2, 0) < EPS || coord_c2.at<float>(2, 0) < EPS) {
+        return false;
+    }
+    // compute parallax
+    cv::Mat op1 = tri_res + tcw1;// (coord - (-tcw1) = coord + tcw1)
+    op1 /= cv::norm(op1);
+    cv::Mat op2 = tri_res + tcw2;
+    op2 /= cv::norm(op2);
+    double sin_theta3 = cv::norm(op1.cross(op2));
+    if (grad_th * sin_theta3 * sin_theta3 < 1.0) { return false; }
+    return true;
+}
+
 int Triangulator::filter_triangulate(const cv::Mat& Rcw1, const cv::Mat& tcw1,
                                      const cv::Mat& Rcw2, const cv::Mat& tcw2,
                                      const std::vector<cv::Mat>& tri_res,
                                      std::vector<bool>& is_inlier,
                                      double grad_th) {
-    int cnt_inlier = 0;
-    is_inlier.resize(tri_res.size(), true);
+    is_inlier.resize(tri_res.size());
     for (size_t i = 0; i < tri_res.size(); ++i) {
-        const cv::Mat pt = tri_res[i];
-        if (!std::isfinite(pt.at<float>(0, 0)) ||
-            !std::isfinite(pt.at<float>(1, 0)) ||
-            !std::isfinite(pt.at<float>(2, 0))) {
-            is_inlier[i] = false;
-            continue;
-        }
-        cv::Mat coord_c1 = Geometry::transform_coord(Rcw1, tcw1, pt);
-        cv::Mat coord_c2 = Geometry::transform_coord(Rcw2, tcw2, pt);
-        // depth must be positive
-        if (coord_c1.at<float>(2, 0) < EPS || coord_c2.at<float>(2, 0) < EPS) {
-            is_inlier[i] = false;
-            continue;
-        }
-        // compute parallax
-        cv::Mat op1 = pt + tcw1;// (coord - (-tcw1) = coord + tcw1)
-        op1 /= cv::norm(op1);
-        cv::Mat op2 = pt + tcw2;
-        op2 /= cv::norm(op2);
-        double sin_theta3 = cv::norm(op1.cross(op2));
-        if (grad_th * sin_theta3 * sin_theta3 < 1.0) {
-            is_inlier[i] = false;
-            continue;
-        }
-        cnt_inlier += 1;
+        is_inlier[i] = is_triangulate_inlier(Rcw1, tcw1, Rcw2, tcw2, tri_res[i],
+                                             grad_th);
     }
-    return cnt_inlier;
+    return cnt_inliers_from_mask(is_inlier);
 }
 
 int Triangulator::triangulate_and_filter_frames(

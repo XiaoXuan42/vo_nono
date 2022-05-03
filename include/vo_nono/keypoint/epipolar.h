@@ -25,7 +25,7 @@ public:
                                     const cv::Mat &ess, const cv::Point2f &pt1,
                                     const cv::Point2f &pt2) {
         cv::Mat inv_cam_intrinsic = camera_intrinsic.inv();
-        cv::Mat l_mat = ess * inv_cam_intrinsic;
+        cv::Mat fundamental = inv_cam_intrinsic.t() * ess * inv_cam_intrinsic;
         cv::Mat mat1 = cv::Mat::zeros(3, 1, CV_32F),
                 mat2 = cv::Mat::zeros(3, 1, CV_32F);
         mat1.at<float>(0, 0) = pt1.x;
@@ -34,7 +34,7 @@ public:
         mat2.at<float>(0, 0) = pt2.x;
         mat2.at<float>(1, 0) = pt2.y;
         mat2.at<float>(2, 0) = 1.0f;
-        cv::Mat l = inv_cam_intrinsic.t() * l_mat * mat1;
+        cv::Mat l = fundamental * mat1;
         cv::Mat mat_res = mat2.t() * l;
         double diff = std::abs(double(mat_res.at<float>(0)));
         double l_denominator =

@@ -67,17 +67,16 @@ private:
     std::vector<cv::DMatch> filter_match(const std::vector<cv::DMatch> &matches,
                                          double epi_th);
     void _set_keyframe(const vo_ptr<Frame> &keyframe);
-    void _update_points_location(const std::vector<cv::Mat> &tri_res,
-                                 const std::vector<cv::DMatch> &matches);
+    void _update_points_location(const std::vector<cv::DMatch> &matches);
     void _associate_points(const std::vector<cv::DMatch> &matches,
-                           double rel_th);
+                           int least_obs);
     void insert_local_frame(const vo_ptr<Frame> &frame) {
         local_map_.local_frames.push_back(frame);
         map_->insert_frame(frame);
     }
     cv::Mat _get_local_map_point_coord(int index);
     void _add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
-                             const cv::Point2f &pixel, int index);
+                          const cv::Point2f &pixel, int index);
 
 private:
     static constexpr int CNT_KEYPTS = 1000;
@@ -108,8 +107,23 @@ private:
 
 private:
     struct LocalMap {
-        std::vector<InvDepthFilter> filters;
-        std::vector<cv::Mat> tri_mats;
+        struct Observation {
+            cv::Mat Rcw;
+            cv::Mat tcw;
+            cv::Point2f pixel;
+            Observation() = default;
+            Observation(cv::Mat Rcw_o, cv::Mat tcw_o,
+                        const cv::Point2f &pixel_o)
+                : Rcw(std::move(Rcw_o)),
+                  tcw(std::move(tcw_o)),
+                  pixel(pixel_o) {}
+        };
+        struct PointInfo {
+            std::vector<Observation> observations;
+            cv::Mat coord;
+            InvDepthFilter filter;
+        };
+        std::vector<PointInfo> point_infos;
         std::vector<bool> own_points;
         std::list<vo_ptr<Frame>> local_frames;
     };
