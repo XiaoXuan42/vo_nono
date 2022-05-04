@@ -1,4 +1,4 @@
-#include "vo_nono/optimize_graph.h"
+#include "vo_nono/optimize.h"
 
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>

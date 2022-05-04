@@ -1,6 +1,7 @@
 #ifndef VO_NONO_GEOMETRY_H
 #define VO_NONO_GEOMETRY_H
 
+#include <array>
 #include <opencv2/calib3d.hpp>
 
 namespace vo_nono {
@@ -83,6 +84,20 @@ public:
             for (int j = 0; j < 3; ++j) { result[i][j] = R.at<double>(i, j); }
         }
     }
+
+    static void angle_axis_to_rotation_mat(const double angle_axis[3],
+                                           cv::Mat &rotation) {
+        double result[3][3];
+        angle_axis_to_rotation_mat(angle_axis, result);
+        rotation = cv::Mat::zeros(3, 3, CV_32F);
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                rotation.at<float>(i, j) = (float) result[i][j];
+            }
+        }
+    }
+
+    static std::array<double, 3> rotation_mat_to_angle_axis(const cv::Mat &R);
 };
 }// namespace vo_nono
 

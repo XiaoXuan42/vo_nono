@@ -1,5 +1,5 @@
-#ifndef VO_NONO_OPTIMIZE_GRAPH_H
-#define VO_NONO_OPTIMIZE_GRAPH_H
+#ifndef VO_NONO_OPTIMIZE_H
+#define VO_NONO_OPTIMIZE_H
 
 #include <ceres/ceres.h>
 
@@ -11,6 +11,7 @@
 
 #include "vo_nono/camera.h"
 #include "vo_nono/types.h"
+#include "vo_nono/util/geometry.h"
 
 namespace vo_nono {
 class OptimizeGraph {
@@ -35,15 +36,10 @@ public:
         assert(Tcw.rows == 3);
         assert(Tcw.cols == 1);
         int cur_cam_id = int(cam_poses.size());
-        cv::Mat Rcw_64;
-        Eigen::Matrix3d R;
-        Rcw.convertTo(Rcw_64, CV_64F);
-        cv::cv2eigen(Rcw_64, R);
-        Eigen::AngleAxisd angle_axis(R);
-        Eigen::Vector3d angle_axis_vec = angle_axis.angle() * angle_axis.axis();
-
+        std::array<double, 3> angle_axis =
+                Geometry::rotation_mat_to_angle_axis(Rcw);
         cam_poses.push_back(std::vector<double>{
-                angle_axis_vec(0), angle_axis_vec(1), angle_axis_vec(2),
+                angle_axis[0], angle_axis[1], angle_axis[2],
                 double(Tcw.at<float>(0)), double(Tcw.at<float>(1)),
                 double(Tcw.at<float>(2))});
         edges.emplace_back(std::vector<Edge>());
@@ -90,8 +86,8 @@ public:
         assert(blk_residuals.size() == residual_ids.size() * 2);
         residual_vals.resize(residual_ids.size());
         for (int i = 0; i < int(blk_residuals.size()); i += 2) {
-            double d1 = blk_residuals[i], d2 = blk_residuals[i+1];
-            residual_vals[i/2] = d1 * d1 + d2 * d2;
+            double d1 = blk_residuals[i], d2 = blk_residuals[i + 1];
+            residual_vals[i / 2] = d1 * d1 + d2 * d2;
         }
     }
 
@@ -121,4 +117,4 @@ private:
 };
 }// namespace vo_nono
 
-#endif//VO_NONO_OPTIMIZE_GRAPH_H
+#endif//VO_NONO_OPTIMIZE_H

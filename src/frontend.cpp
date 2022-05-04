@@ -63,9 +63,9 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     } else if (state_ == State::Tracking) {
         if (tracking(image, t)) {
             insert_local_frame(curframe_);
-            new_keyframe();
             b_succ = true;
         }
+        new_keyframe();
     } else {
         unimplemented();
     }
@@ -164,7 +164,7 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
         CNT_TRACK_MIN_MATCHES) {
         b_track_good_ = true;
     }
-    if (b_track_good_) { triangulate_and_set(direct_matches_); }
+    if (b_track_good_) { b_track_good_ = triangulate_and_set(direct_matches_); }
 
     log_debug_line("Track good: " << b_track_good_);
     log_debug_line("Match good: " << b_match_good_);
@@ -310,19 +310,42 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
 
 void Frontend::new_keyframe() {
     bool is_keyframe = false;
+    vo_ptr<Frame> candidate;
+    int cnt = 0;
+    for (auto iter = local_map_.local_frames.rbegin();
+         iter != local_map_.local_frames.rend(); ++iter) {
+        if (*iter == keyframe_) {
+            break;
+        } else if (cnt >= 5) {
+            break;
+        }
+        if ((*iter)->get_cnt_map_pt() >= 100) {
+            candidate = *iter;
+            break;
+        }
+        cnt += 1;
+    }
+    if (!candidate) { candidate = local_map_.local_frames.back(); }
+    if (candidate == keyframe_) { return; }
+
     if (direct_matches_.size() < 0.3 * keyframe_->feature_points.size()) {
+        is_keyframe = true;
+    } else if (!b_track_good_) {
         is_keyframe = true;
     }
     if (is_keyframe) {
-        log_debug_line("Switch keyframe: " << curframe_->get_id());
-        _set_keyframe(curframe_);
+        log_debug_line("Switch keyframe: " << candidate->get_id() << " set "
+                                           << candidate->get_cnt_map_pt()
+                                           << " points.");
+        _set_keyframe(candidate);
     }
 }
 
-void Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {
-    std::vector<cv::DMatch> valid_matches = filter_match(matches, 6);
+bool Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {
+    std::vector<cv::DMatch> valid_matches = filter_match_cv(matches, 6);
     _update_points_location(valid_matches, 1000);
     _associate_points(valid_matches, 3);
+    return true;
 }
 
 std::vector<cv::DMatch> Frontend::filter_match(

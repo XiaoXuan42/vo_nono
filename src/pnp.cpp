@@ -2,7 +2,7 @@
 
 #include <opencv2/calib3d.hpp>
 
-#include "vo_nono/optimize_graph.h"
+#include "vo_nono/optimize.h"
 #include "vo_nono/util/constants.h"
 #include "vo_nono/util/rand.h"
 
@@ -120,7 +120,7 @@ void PnP::pnp_ransac(const std::vector<cv::Matx31f>& coords,
     if (tcw.type() != CV_32F) { tcw.convertTo(tcw, CV_32F); }
 }
 
-void PnP::cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
+void PnP::pnp_ransac_cv(const std::vector<cv::Matx31f>& coords,
                         const std::vector<cv::Point2f>& img_pts,
                         const Camera& camera, int iter_cnt, float proj_th,
                         cv::Mat& Rcw, cv::Mat& tcw,
@@ -151,7 +151,7 @@ void PnP::cv_pnp_ransac(const std::vector<cv::Matx31f>& coords,
     if (tcw.type() != CV_32F) { tcw.convertTo(tcw, CV_32F); }
 }
 
-void PnP::cv_pnp_optimize(const std::vector<cv::Matx31f>& coords,
+void PnP::pnp_optimize_cv(const std::vector<cv::Matx31f>& coords,
                           const std::vector<cv::Point2f>& img_pts,
                           const Camera& camera, cv::Mat& Rcw, cv::Mat& tcw) {
     cv::Mat rvec;

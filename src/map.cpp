@@ -4,7 +4,7 @@
 
 #include "vo_nono/camera.h"
 #include "vo_nono/keypoint/match.h"
-#include "vo_nono/optimize_graph.h"
+#include "vo_nono/optimize.h"
 #include "vo_nono/util/constants.h"
 
 namespace vo_nono {

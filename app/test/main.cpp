@@ -7,9 +7,12 @@
 #include <random>
 #include <thread>
 
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
 #include "vo_nono/camera.h"
 #include "vo_nono/motion.h"
-#include "vo_nono/optimize_graph.h"
+#include "vo_nono/optimize.h"
 #include "vo_nono/util/geometry.h"
 #include "vo_nono/util/histogram.h"
 #include "vo_nono/util/queue.h"
@@ -355,7 +358,15 @@ void test_triangulation() {
     std::cout << tri_res / tri_res.at<float>(3) << std::endl;
 }
 
+void test_eigen() {
+    Eigen::Matrix3d R;
+    R << 0, 1, 0, -1, 0, 0, 0, 0, 1;
+    Eigen::AngleAxisd angle_axis(R);
+    std::cout << angle_axis.axis() << std::endl;
+    std::cout << angle_axis.angle() << std::endl;
+}
+
 int main() {
-    test_optimize_graph();
+    test_eigen();
     return 0;
 }

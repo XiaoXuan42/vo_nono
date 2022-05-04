@@ -63,7 +63,7 @@ private:
     int track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
                             float r_th, float ransac_th);
     void new_keyframe();
-    void triangulate_and_set(const std::vector<cv::DMatch> &matches);
+    bool triangulate_and_set(const std::vector<cv::DMatch> &matches);
     std::vector<cv::DMatch> filter_match(const std::vector<cv::DMatch> &matches,
                                          double epi_th);
     std::vector<cv::DMatch> filter_match_cv(const std::vector<cv::DMatch> &matches, double epi_th);
