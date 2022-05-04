@@ -55,6 +55,8 @@ void Frontend::get_image(const cv::Mat &image, double t) {
             state_ = State::Tracking;
             map_->insert_frame(keyframe_);
             insert_local_frame(curframe_);
+            show_matches(keyframe_, curframe_, init_matches_);
+            show_coordinate(curframe_);
             b_succ = true;
         } else if (init_state == -1) {
             // not enough matches
@@ -87,10 +89,8 @@ int Frontend::initialize(const cv::Mat &image) {
     if (init_matches_.size() < 10) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
     for (auto &match : init_matches_) {
-        matched_pt1.push_back(
-                keyframe_->feature_points[match.queryIdx]->keypoint.pt);
-        matched_pt2.push_back(
-                curframe_->feature_points[match.trainIdx]->keypoint.pt);
+        matched_pt1.push_back(keyframe_->get_pixel_pt(match.queryIdx));
+        matched_pt2.push_back(curframe_->get_pixel_pt(match.trainIdx));
     }
     std::vector<unsigned char> mask;
     cv::Mat Ess;
@@ -103,10 +103,8 @@ int Frontend::initialize(const cv::Mat &image) {
     matched_pt1.clear();
     matched_pt2.clear();
     for (auto &match : init_matches_) {
-        matched_pt1.push_back(
-                keyframe_->feature_points[match.queryIdx]->keypoint.pt);
-        matched_pt2.push_back(
-                curframe_->feature_points[match.trainIdx]->keypoint.pt);
+        matched_pt1.push_back(keyframe_->get_pixel_pt(match.queryIdx));
+        matched_pt2.push_back(curframe_->get_pixel_pt(match.trainIdx));
     }
 
     cv::Mat Rcw, tcw;
