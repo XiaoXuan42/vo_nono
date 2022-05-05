@@ -40,6 +40,8 @@ public:
           descriptors(std::move(descriptors)),
           mb_space_hash(false) {}
 
+    int match_in_rec(const cv::Point2f &pixel, const cv::Mat &dscpt, float r_th,
+                     int pyramid_level, float lowe, float max_d);
     std::vector<ProjMatch> match_by_projection(
             const std::vector<vo_ptr<MapPoint>> &map_points, float r_th);
     [[nodiscard]] std::vector<cv::DMatch> match_descriptor_bf(
@@ -49,7 +51,9 @@ public:
             const std::vector<cv::DMatch> &matches,
             const std::vector<cv::KeyPoint> &kpts1,
             const std::vector<cv::KeyPoint> &kpts2, int topK);
-    static std::vector<cv::DMatch> filter_match_by_dis(const std::vector<cv::DMatch> &matches, float soft_th, float hard_th, int cnt);
+    static std::vector<cv::DMatch> filter_match_by_dis(
+            const std::vector<cv::DMatch> &matches, float soft_th,
+            float hard_th, int cnt);
 
     static void filter_match_by_ess(const cv::Mat &Ess,
                                     const cv::Mat &camera_intrinsic,

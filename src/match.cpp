@@ -8,6 +8,61 @@
 #include "vo_nono/util/util.h"
 
 namespace vo_nono {
+int ORBMatcher::match_in_rec(const cv::Point2f &pixel, const cv::Mat &dscpt,
+                             float r_th, int pyramid_level, float lowe,
+                             float max_d) {
+    if (!mb_space_hash) { space_hash(); }
+    assert(pixel.x >= 0 && pixel.x < m_total_width && pixel.y >= 0 &&
+           pixel.y < m_total_height);
+    int min_width_id = get_grid_width_id(std::max(0.0f, pixel.x - r_th));
+    int max_width_id =
+            get_grid_width_id(std::min(m_total_width, pixel.x + r_th));
+    int min_height_id = get_grid_height_id(std::max(0.0f, pixel.y - r_th));
+    int max_height_id =
+            get_grid_height_id(std::min(m_total_height, pixel.y + r_th));
+
+    int best_id = -1;
+    int best_dis = std::numeric_limits<int>::max();
+    int second_dis = std::numeric_limits<int>::max();
+    for (int i = min_height_id; i <= max_height_id; ++i) {
+        for (int j = min_width_id; j <= max_width_id; ++j) {
+            int min_pyramid_level = 0, max_pyramid_level = 0;
+            // if pyramid level is negative, then search in all layer of pyramids
+            if (pyramid_level < 0) {
+                min_pyramid_level = 0;
+                max_pyramid_level = int(m_pyramid_grids.size()) - 1;
+            } else {
+                min_pyramid_level = std::max(pyramid_level - 1, 0);
+                max_pyramid_level = std::min(pyramid_level + 1,
+                                             int(m_pyramid_grids.size()) - 1);
+            }
+
+            for (int k = min_pyramid_level; k <= max_pyramid_level; ++k) {
+                auto &level_grid = m_pyramid_grids[k];
+                for (auto index : level_grid.grid[i][j]) {
+                    cv::KeyPoint kpt = kpts[index];
+                    if (std::fabs(kpt.pt.x - pixel.x) > r_th ||
+                        std::fabs(kpt.pt.y - pixel.y) > r_th) {
+                        continue;
+                    }
+                    int cur_dis = orb_distance(descriptors.row(index), dscpt);
+                    if (cur_dis < best_dis) {
+                        best_id = index;
+                        second_dis = best_dis;
+                        best_dis = cur_dis;
+                    }
+                }
+            }
+        }
+    }
+    if (double(best_dis) > double(max_d)) {
+        return -1;
+    } else if (double(best_dis) > double(second_dis) * double(lowe)) {
+        return -1;
+    }
+    return best_id;
+}
+
 std::vector<ProjMatch> ORBMatcher::match_by_projection(
         const std::vector<vo_ptr<MapPoint>> &map_points, float r_th) {
     if (!mb_space_hash) { space_hash(); }
@@ -17,7 +72,6 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
     std::vector<double> distances;
     std::unordered_map<int, int> book;
 
-    int proj_exceed = 0, in_image = 0, no_near = 0, collide = 0;
     cv::Mat proj_mat = Geometry::get_proj_mat(m_camera_intrinsic, m_Rcw, m_tcw);
     for (auto &map_pt : map_points) {
         cv::Point2f proj_img_pt =
@@ -25,8 +79,6 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
         auto coord = cv::Matx31f(map_pt->get_coord());
         if (proj_img_pt.x >= 0 && proj_img_pt.x < m_total_width &&
             proj_img_pt.y >= 0 && proj_img_pt.y < m_total_height) {
-            in_image += 1;
-
             int min_width_id =
                     get_grid_width_id(std::max(0.0f, proj_img_pt.x - r_th));
             int max_width_id = get_grid_width_id(
@@ -65,20 +117,11 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
                 }
             }
 
-            if (best_id < 0) {
-                no_near += 1;
-                continue;
-            }
-            if (best_dis > MAX_DESC_DIS) {
-                proj_exceed += 1;
-                continue;
-            }
+            if (best_id < 0) { continue; }
+            if (best_dis > MAX_DESC_DIS) { continue; }
             if (book.count(best_id)) {
                 assert(book[best_id] < int(distances.size()));
-                if (distances[book[best_id]] < best_dis) {
-                    collide += 1;
-                    continue;
-                }
+                if (distances[book[best_id]] < best_dis) { continue; }
             }
 
             book[best_id] = int(distances.size());
@@ -97,11 +140,6 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
                                             img_pts[cur_index],
                                             map_pts[cur_index]));
     }
-    log_debug_line(in_image << " projected inside image with " << proj_exceed
-                            << " points distance too far, " << no_near
-                            << " points no near point, " << collide
-                            << " collided, total projected "
-                            << proj_matches.size());
     return proj_matches;
 }
 

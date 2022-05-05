@@ -46,6 +46,10 @@ public:
         assert(mat_.type() == CV_32F);
         return mat_.at<float>(1, 2);
     }
+    [[nodiscard]] bool inside_image(const cv::Point2f& pixel) const {
+        return (pixel.x >= 0 && pixel.y >= 0) &&
+               (pixel.x < width_ && pixel.y < height_);
+    }
 
 private:
     cv::Mat mat_;

@@ -52,6 +52,8 @@ private:
         keyframe_matches_.clear();
         cnt_inlier_direct_match_ = 0;
         cnt_inlier_proj_match_ = 0;
+        track_curframe_keyframe_.clear();
+        track_keyframe_curframe_.clear();
     }
 
     int initialize(const cv::Mat &image);
@@ -60,6 +62,7 @@ private:
     double _compute_h_score(const cv::Mat &H,
                             const std::vector<cv::DMatch> &matches);
     bool tracking(const cv::Mat &image, double t);
+    void project_keyframe();
     void tracking_with_keyframe();
     void relocalization();
     std::vector<bool> track_by_match(const vo_ptr<Frame> &ref_frame,
@@ -87,6 +90,10 @@ private:
                           const cv::Point2f &pixel, int index,
                           double tri_grad_th);
 
+    // using matches with keyframe and optimize method to figure out pose
+    std::vector<bool> _pose_from_match_by_optimize(
+            const std::vector<cv::DMatch> &matches, cv::Mat &Rcw, cv::Mat &tcw);
+
 private:
     static constexpr int CNT_KEYPTS = 1000;
     static constexpr int CNT_MATCHES = 1000;
@@ -104,7 +111,9 @@ private:
     std::vector<cv::DMatch> init_matches_;
     std::vector<cv::DMatch> direct_matches_;
     std::vector<bool> direct_match_inliers_;
-    std::unordered_map<vo_ptr<MapPoint>, int> points_seen_;
+
+    std::unordered_map<int, int> track_keyframe_curframe_;
+    std::unordered_map<int, int> track_curframe_keyframe_;
 
     vo_ptr<Map> map_;
 
