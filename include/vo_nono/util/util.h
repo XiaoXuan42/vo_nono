@@ -40,6 +40,20 @@ template<typename T>
     }
     return result;
 }
+
+template<typename T>
+[[nodiscard]] inline std::vector<T> mask_and(const std::vector<T> &mask1, const std::vector<T> &mask2) {
+    assert(mask1.size() == mask2.size());
+    std::vector<T> result(mask1.size());
+    for (int i = 0; i < (int) mask1.size(); ++i) {
+        if (mask1[i] && mask2[i]) {
+            result[i] = true;
+        } else {
+            result[i] = false;
+        }
+    }
+    return result;
+}
 }// namespace vo_nono
 
 #endif

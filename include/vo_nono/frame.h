@@ -101,7 +101,7 @@ public:
     }
 
     // keypoints that already has corresponding map point
-    [[nodiscard]] size_t get_cnt_map_pt() const { return map_pt_cnt_; }
+    [[nodiscard]] int get_cnt_map_pt() const { return map_pt_cnt_; }
     void set_map_pt(int i, const std::shared_ptr<MapPoint> &pt) {
         assert(i < int(feature_points.size()));
         if (!feature_points[i]->map_point) { map_pt_cnt_ += 1; }

@@ -48,12 +48,13 @@ namespace vo_nono {
         auto pt = frame->feature_points[i]->keypoint.pt;
         if (frame->is_index_set(i)) {
             cnt += 1;
-            if (cnt > 20) { break; }
+            if (cnt > 50) { break; }
             cv::Mat coord = frame->get_map_pt(i)->get_coord();
-            std::string annotate = "(" + std::to_string(coord.at<float>(0)) +
-                                   ", " + std::to_string(coord.at<float>(1)) +
-                                   ", " + std::to_string(coord.at<float>(2)) +
-                                   ")";
+            std::string annotate = std::to_string(coord.at<float>(2));
+//            std::string annotate = "(" + std::to_string(coord.at<float>(0)) +
+//                                   ", " + std::to_string(coord.at<float>(1)) +
+//                                   ", " + std::to_string(coord.at<float>(2)) +
+//                                   ")";
             cv::circle(img, pt, 5, CV_RGB(0.0, 0.0, 255.0));
             cv::putText(img, annotate, pt, cv::FONT_HERSHEY_PLAIN, 1,
                         CV_RGB(255.0, 0.0, 0.0));

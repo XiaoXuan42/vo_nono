@@ -1,3 +1,5 @@
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -7,10 +9,8 @@
 #include <random>
 #include <thread>
 
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-
 #include "vo_nono/camera.h"
+#include "vo_nono/keypoint/triangulate.h"
 #include "vo_nono/motion.h"
 #include "vo_nono/optimize.h"
 #include "vo_nono/util/geometry.h"
@@ -349,13 +349,21 @@ void test_triangulation() {
     cv::Mat img_pt0 = proj0 * pos, img_pt1 = proj1 * pos;
     img_pt0 /= img_pt0.at<float>(2);
     img_pt1 /= img_pt1.at<float>(2);
-    cv::Point2f pt0(img_pt0.at<float>(0), img_pt0.at<float>(1)), pt1(img_pt1.at<float>(0), img_pt1.at<float>(1));
-    std::vector<cv::Point2f> vec_pt0, vec_pt1;
+    cv::Point2f pt0(img_pt0.at<float>(0), img_pt0.at<float>(1)),
+            pt1(img_pt1.at<float>(0), img_pt1.at<float>(1));
+    std::vector<cv::Point2f> vec_pt0, vec_pt1, vec_pts;
+    std::vector<cv::Mat> proj_arrays;
     vec_pt0.push_back(pt0);
     vec_pt1.push_back(pt1);
+    proj_arrays.push_back(proj0);
+    proj_arrays.push_back(proj1);
+    vec_pts.push_back(pt0);
+    vec_pts.push_back(pt1);
     cv::Mat tri_res;
     cv::triangulatePoints(proj0, proj1, vec_pt0, vec_pt1, tri_res);
+    cv::Mat tri_res2 = vo_nono::Triangulator::triangulate(proj_arrays, vec_pts);
     std::cout << tri_res / tri_res.at<float>(3) << std::endl;
+    std::cout << tri_res2 << std::endl;
 }
 
 void test_eigen() {
@@ -367,6 +375,6 @@ void test_eigen() {
 }
 
 int main() {
-    test_eigen();
+    test_triangulation();
     return 0;
 }

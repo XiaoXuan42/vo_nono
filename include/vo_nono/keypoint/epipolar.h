@@ -26,20 +26,7 @@ public:
                                     const cv::Point2f &pt2) {
         cv::Mat inv_cam_intrinsic = camera_intrinsic.inv();
         cv::Mat fundamental = inv_cam_intrinsic.t() * ess * inv_cam_intrinsic;
-        cv::Mat mat1 = cv::Mat::zeros(3, 1, CV_32F),
-                mat2 = cv::Mat::zeros(3, 1, CV_32F);
-        mat1.at<float>(0, 0) = pt1.x;
-        mat1.at<float>(1, 0) = pt1.y;
-        mat1.at<float>(2, 0) = 1.0f;
-        mat2.at<float>(0, 0) = pt2.x;
-        mat2.at<float>(1, 0) = pt2.y;
-        mat2.at<float>(2, 0) = 1.0f;
-        cv::Mat l = fundamental * mat1;
-        cv::Mat mat_res = mat2.t() * l;
-        double diff = std::abs(double(mat_res.at<float>(0)));
-        double l_denominator =
-                std::sqrt(l.dot(l) - l.at<float>(2) * l.at<float>(2));
-        return diff / l_denominator;
+        return epipolar_line_dis(fundamental, pt1, pt2);
     }
 
     static double epipolar_line_dis(const cv::Mat &camera_intrinsic,
@@ -48,6 +35,29 @@ public:
                                     const cv::Point2f &pt2) {
         cv::Mat ess = compute_essential(R21, T21);
         return epipolar_line_dis(camera_intrinsic, ess, pt1, pt2);
+    }
+
+    static double epipolar_line_dis(const cv::Mat &fundamental,
+                                    const cv::Point2f &pt1,
+                                    const cv::Point2f &pt2) {
+        cv::Mat fundamental_local = fundamental.clone();
+        if (fundamental.type() != CV_32F) {
+            fundamental_local.convertTo(fundamental_local, CV_32F);
+        }
+        cv::Mat mat1 = cv::Mat::zeros(3, 1, CV_32F),
+                mat2 = cv::Mat::zeros(3, 1, CV_32F);
+        mat1.at<float>(0, 0) = pt1.x;
+        mat1.at<float>(1, 0) = pt1.y;
+        mat1.at<float>(2, 0) = 1.0f;
+        mat2.at<float>(0, 0) = pt2.x;
+        mat2.at<float>(1, 0) = pt2.y;
+        mat2.at<float>(2, 0) = 1.0f;
+        cv::Mat l = fundamental_local * mat1;
+        cv::Mat mat_res = mat2.t() * l;
+        double diff = std::abs(double(mat_res.at<float>(0)));
+        double l_denominator =
+                std::sqrt(l.dot(l) - l.at<float>(2) * l.at<float>(2));
+        return diff / l_denominator;
     }
 };
 }// namespace vo_nono

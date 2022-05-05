@@ -55,20 +55,27 @@ private:
     }
 
     int initialize(const cv::Mat &image);
+    double _compute_ess_score(const cv::Mat &ess,
+                              const std::vector<cv::DMatch> &matches);
+    double _compute_h_score(const cv::Mat &H,
+                            const std::vector<cv::DMatch> &matches);
     bool tracking(const cv::Mat &image, double t);
     void tracking_with_keyframe();
     void relocalization();
     std::vector<bool> track_by_match(const vo_ptr<Frame> &ref_frame,
-                       const std::vector<cv::DMatch> &matches, float ransac_th);
+                                     const std::vector<cv::DMatch> &matches,
+                                     float ransac_th);
     int track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
                             float r_th, float ransac_th);
     void new_keyframe();
     bool triangulate_and_set(const std::vector<cv::DMatch> &matches);
     std::vector<cv::DMatch> filter_match(const std::vector<cv::DMatch> &matches,
                                          double epi_th);
-    std::vector<cv::DMatch> filter_match_cv(const std::vector<cv::DMatch> &matches, double epi_th);
+    std::vector<cv::DMatch> filter_match_cv(
+            const std::vector<cv::DMatch> &matches, double epi_th);
     void _set_keyframe(const vo_ptr<Frame> &keyframe);
-    void _update_points_location(const std::vector<cv::DMatch> &matches, double tri_grad_th);
+    void _update_points_location(const std::vector<cv::DMatch> &matches,
+                                 double tri_grad_th);
     void _associate_points(const std::vector<cv::DMatch> &matches,
                            int least_obs);
     void insert_local_frame(const vo_ptr<Frame> &frame) {
@@ -77,7 +84,8 @@ private:
     }
     cv::Mat _get_local_map_point_coord(int index);
     void _add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
-                          const cv::Point2f &pixel, int index, double tri_grad_th);
+                          const cv::Point2f &pixel, int index,
+                          double tri_grad_th);
 
 private:
     static constexpr int CNT_KEYPTS = 1000;

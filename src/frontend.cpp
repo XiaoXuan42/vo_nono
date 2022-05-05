@@ -55,8 +55,6 @@ void Frontend::get_image(const cv::Mat &image, double t) {
             state_ = State::Tracking;
             map_->insert_frame(keyframe_);
             insert_local_frame(curframe_);
-            show_matches(keyframe_, curframe_, init_matches_);
-            show_coordinate(curframe_);
             b_succ = true;
         } else if (init_state == -1) {
             // not enough matches
@@ -67,7 +65,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
             insert_local_frame(curframe_);
             b_succ = true;
         }
-        new_keyframe();
+        //new_keyframe();
     } else {
         unimplemented();
     }
@@ -80,26 +78,37 @@ void Frontend::get_image(const cv::Mat &image, double t) {
 int Frontend::initialize(const cv::Mat &image) {
     keyframe_matches_ =
             matcher_->match_descriptor_bf(keyframe_->get_descriptors());
-    init_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 15,
+    init_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 32,
                                                     CNT_MATCHES);
     init_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
             init_matches_, keyframe_->get_keypoints(),
             curframe_->get_keypoints(), 3);
 
-    if (init_matches_.size() < 10) { return -1; }
+    if (init_matches_.size() < 100) { return -1; }
     std::vector<cv::Point2f> matched_pt1, matched_pt2;
     for (auto &match : init_matches_) {
         matched_pt1.push_back(keyframe_->get_pixel_pt(match.queryIdx));
         matched_pt2.push_back(curframe_->get_pixel_pt(match.trainIdx));
     }
-    std::vector<unsigned char> mask;
+    std::vector<unsigned char> mask_ess;
+    std::vector<unsigned char> mask_homo;
     cv::Mat Ess;
+    cv::Mat H;
     Ess = cv::findEssentialMat(matched_pt1, matched_pt2,
                                camera_.get_intrinsic_mat(), cv::RANSAC, 0.999,
-                               2.0, 1000, mask);
-    // filter outliers
-    init_matches_ = filter_by_mask(init_matches_, mask);
-    if (init_matches_.size() < 50) { return -1; }
+                               2.0, 1000, mask_ess);
+    H = cv::findHomography(matched_pt1, matched_pt2, cv::RANSAC, 2.0,
+                           mask_homo);
+    auto ess_matches = filter_by_mask(init_matches_, mask_ess);
+    auto h_matches = filter_by_mask(init_matches_, mask_homo);
+    double e_score = _compute_ess_score(Ess, ess_matches);
+    double h_score = _compute_h_score(H, h_matches);
+    if (e_score < h_score) {
+        init_matches_ = std::move(ess_matches);
+    } else {
+        init_matches_ = std::move(h_matches);
+    }
+    if (init_matches_.size() < 100) { return -1; }
     matched_pt1.clear();
     matched_pt2.clear();
     for (auto &match : init_matches_) {
@@ -107,9 +116,27 @@ int Frontend::initialize(const cv::Mat &image) {
         matched_pt2.push_back(curframe_->get_pixel_pt(match.trainIdx));
     }
 
+    // recover pose
     cv::Mat Rcw, tcw;
-    cv::recoverPose(Ess, matched_pt1, matched_pt2, camera_.get_intrinsic_mat(),
-                    Rcw, tcw);
+    if (e_score < h_score) {
+        // recover from ess
+        cv::recoverPose(Ess, matched_pt1, matched_pt2,
+                        camera_.get_intrinsic_mat(), Rcw, tcw);
+    } else {
+        // recover from homography
+        std::vector<int> indices;
+        std::vector<cv::Mat> rotations, translations, normals;
+        cv::decomposeHomographyMat(H, camera_.get_intrinsic_mat(), rotations,
+                                   translations, normals);
+        cv::filterHomographyDecompByVisibleRefpoints(
+                rotations, normals, matched_pt1, matched_pt2, indices);
+        if (indices.size() > 1 || indices.empty()) {
+            return -2;
+        } else {
+            Rcw = rotations[indices[0]];
+            tcw = translations[indices[0]];
+        }
+    }
     Rcw.convertTo(Rcw, CV_32F);
     tcw.convertTo(tcw, CV_32F);
     curframe_->set_Rcw(Rcw);
@@ -141,6 +168,66 @@ int Frontend::initialize(const cv::Mat &image) {
     _update_points_location(init_matches_, 1000);
     _associate_points(init_matches_, 2);
     return 0;
+}
+
+double Frontend::_compute_ess_score(const cv::Mat &ess,
+                                    const std::vector<cv::DMatch> &matches) {
+    double e_score = 0;
+    cv::Mat cam_inv = camera_.get_intrinsic_mat().inv();
+    cam_inv.convertTo(cam_inv, ess.type());
+    cv::Mat fundamental1 = cam_inv.t() * ess * cam_inv;
+    cv::Mat fundamental2 = cam_inv.t() * ess.t() * cam_inv;
+    for (auto &match : matches) {
+        double dis1 = Epipolar::epipolar_line_dis(
+                fundamental1, keyframe_->get_pixel_pt(match.queryIdx),
+                curframe_->get_pixel_pt(match.trainIdx));
+        dis1 *= dis1;
+        e_score += chi2_2_5 - dis1;
+        double dis2 = Epipolar::epipolar_line_dis(
+                fundamental2, curframe_->get_pixel_pt(match.trainIdx),
+                keyframe_->get_pixel_pt(match.queryIdx));
+        dis2 *= dis2;
+        e_score += chi2_2_5 - dis2;
+    }
+    assert(!matches.empty());
+    return e_score / double(matches.size());
+}
+
+double Frontend::_compute_h_score(const cv::Mat &H,
+                                  const std::vector<cv::DMatch> &matches) {
+    double h_score = 0;
+    cv::Mat H_inv = H.inv();
+    float h[3][3], h_inv[3][3];
+    assert(H.type() == CV_64F);
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            h[i][j] = (float) H.at<double>(i, j);
+            h_inv[i][j] = (float) H_inv.at<double>(i, j);
+        }
+    }
+
+    for (auto &match : matches) {
+        cv::Point2f pt1 = keyframe_->get_pixel_pt(match.queryIdx);
+        cv::Point2f pt2 = curframe_->get_pixel_pt(match.trainIdx);
+        float inv1_2 = 1.0f / (h[2][0] * pt1.x + h[2][1] * pt1.y + h[2][2]);
+        float x1_2 = (h[0][0] * pt1.x + h[0][1] * pt1.y + h[0][2]) * inv1_2;
+        float y1_2 = (h[1][0] * pt1.x + h[1][1] * pt1.y + h[1][2]) * inv1_2;
+        double dis1 = (pt2.x - x1_2) * (pt2.x - x1_2) +
+                      (pt2.y - y1_2) * (pt2.y - y1_2);
+        h_score += chi2_2_5 - dis1;
+
+        float inv2_1 = 1.0f / (h_inv[2][0] * pt2.x + h_inv[2][1] * pt2.y +
+                               h_inv[2][2]);
+        float x2_1 = (h_inv[0][0] * pt2.x + h_inv[0][1] * pt2.y + h_inv[0][2]) *
+                     inv2_1;
+        float y2_1 = (h_inv[1][0] * pt2.x + h_inv[1][1] * pt2.y + h_inv[1][2]) *
+                     inv2_1;
+        double dis2 = (pt1.x - x2_1) * (pt1.x - x2_1) +
+                      (pt1.y - y2_1) * (pt1.y - y2_1);
+        h_score += chi2_2_5 - dis2;
+    }
+    assert(!matches.empty());
+    return h_score / double(matches.size());
 }
 
 bool Frontend::tracking(const cv::Mat &image, double t) {
@@ -309,24 +396,22 @@ int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
 void Frontend::new_keyframe() {
     bool is_keyframe = false;
     vo_ptr<Frame> candidate;
-    int cnt = 0;
     for (auto iter = local_map_.local_frames.rbegin();
          iter != local_map_.local_frames.rend(); ++iter) {
-        if (*iter == keyframe_) {
-            break;
-        } else if (cnt >= 5) {
-            break;
-        }
+        if (*iter == keyframe_) { break; }
         if ((*iter)->get_cnt_map_pt() >= 100) {
             candidate = *iter;
             break;
         }
-        cnt += 1;
     }
-    if (!candidate) { candidate = local_map_.local_frames.back(); }
-    if (candidate == keyframe_) { return; }
+    if (!candidate || candidate == keyframe_) { return; }
 
     if (direct_matches_.size() < 0.3 * keyframe_->feature_points.size()) {
+        is_keyframe = true;
+    } else if (curframe_->get_cnt_map_pt() < cnt_inlier_direct_match_) {
+        is_keyframe = true;
+    } else if (curframe_->get_cnt_map_pt() <
+               0.4 * keyframe_->get_cnt_map_pt()) {
         is_keyframe = true;
     } else if (!b_track_good_) {
         is_keyframe = true;

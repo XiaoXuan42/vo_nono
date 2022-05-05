@@ -19,17 +19,40 @@ cv::Mat Triangulator::triangulate(const cv::Mat& proj1, const cv::Mat& proj2,
 cv::Mat Triangulator::triangulate(const std::vector<cv::Mat>& proj,
                                   const std::vector<cv::Point2f>& pixels) {
     assert(proj.size() == pixels.size());
+    std::vector<float> weight(pixels.size(), 1.0f);
     cv::Mat A = cv::Mat::zeros(2 * (int) proj.size(), 4, CV_32F);
-    for (int i = 0; i < int(proj.size()); i++) {
-        cv::Mat r1 = proj[i].row(0) - pixels[i].x * proj[i].row(2);
-        cv::Mat r2 = proj[i].row(1) - pixels[i].y * proj[i].row(2);
-        r1.copyTo(A.row(i * 2));
-        r2.copyTo(A.row(i * 2 + 1));
+    float max_change = 0.0f;
+    int iter_cnt = 0;
+    cv::Mat res, old_res;
+    do {
+        max_change = 0.0f;
+        for (int i = 0; i < int(proj.size()); i++) {
+            cv::Mat r1 = proj[i].row(0) - pixels[i].x * proj[i].row(2);
+            cv::Mat r2 = proj[i].row(1) - pixels[i].y * proj[i].row(2);
+            r1 *= weight[i];
+            r2 *= weight[i];
+            r1.copyTo(A.row(i * 2));
+            r2.copyTo(A.row(i * 2 + 1));
+        }
+        cv::Mat U, w, Vt;
+        cv::SVDecomp(A, w, U, Vt);
+        res = Vt.row(3).t();
+        if (iter_cnt == 0) {
+            old_res = res.clone();
+        }
+        for (int i = 0; i < int(proj.size()); ++i) {
+            cv::Mat l3 = (proj[i].row(2) * res);
+            float new_w = l3.at<float>(0);
+            max_change = std::max(max_change, std::abs(new_w - weight[i]));
+            weight[i] = new_w;
+        }
+        iter_cnt += 1;
+    } while (max_change > 0.1 && iter_cnt < 10);
+    if (iter_cnt >= 10) {
+        return Geometry::hm3d_to_euclid3d(old_res);
+    } else {
+        return Geometry::hm3d_to_euclid3d(res);
     }
-    cv::Mat U, w, Vt;
-    cv::SVDecomp(A, w, U, Vt);
-    cv::Mat res = Vt.row(3).t();
-    return Geometry::hm3d_to_euclid3d(res);
 }
 
 // triangulate multiple points given two frame
