@@ -65,7 +65,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
             insert_local_frame(curframe_);
             b_succ = true;
         }
-        //new_keyframe();
+        new_keyframe();
     } else {
         unimplemented();
     }
@@ -103,7 +103,7 @@ int Frontend::initialize(const cv::Mat &image) {
     auto h_matches = filter_by_mask(init_matches_, mask_homo);
     double e_score = _compute_ess_score(Ess, ess_matches);
     double h_score = _compute_h_score(H, h_matches);
-    if (e_score < h_score) {
+    if (e_score > h_score) {
         init_matches_ = std::move(ess_matches);
     } else {
         init_matches_ = std::move(h_matches);
@@ -118,7 +118,7 @@ int Frontend::initialize(const cv::Mat &image) {
 
     // recover pose
     cv::Mat Rcw, tcw;
-    if (e_score < h_score) {
+    if (e_score > h_score) {
         // recover from ess
         cv::recoverPose(Ess, matched_pt1, matched_pt2,
                         camera_.get_intrinsic_mat(), Rcw, tcw);
@@ -567,37 +567,39 @@ void Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
                                                 keyframe_->get_Rcw(),
                                                 curframe_->get_Tcw(), tri_res);
 
-    // parallax test
-    if (Triangulator::is_triangulate_inlier(keyframe_->get_Rcw(),
-                                            keyframe_->get_Tcw(), Rcw, tcw,
-                                            tri_res, tri_grad_th)) {
+    bool ok = true;
+    for (auto &obs : local_map_.point_infos[index].observations) {
+        // parallax test
+        if (!Triangulator::is_triangulate_inlier(obs.Rcw, obs.tcw, Rcw, tcw,
+                                                tri_res, tri_grad_th)) {
+            ok = false;
+            break;
+        }
         // reprojection error test
-        bool ok = true;
+        cv::Mat cur_proj_mat = Geometry::get_proj_mat(
+                camera_.get_intrinsic_mat(), obs.Rcw, obs.tcw);
+        double err2 =
+                Geometry::reprojection_err2(cur_proj_mat, tri_res, obs.pixel);
+        if (err2 > chi2_2_5) {
+            ok = false;
+            break;
+        }
+    }
+    // update state
+    if (ok) {
+        local_map_.point_infos[index].observations.emplace_back(Rcw, tcw,
+                                                                pixel);
+        // update map points from multiple observations
+        std::vector<cv::Mat> projs;
+        std::vector<cv::Point2f> pixels;
         for (auto &obs : local_map_.point_infos[index].observations) {
             cv::Mat cur_proj_mat = Geometry::get_proj_mat(
                     camera_.get_intrinsic_mat(), obs.Rcw, obs.tcw);
-            double err2 = Geometry::reprojection_err2(cur_proj_mat, tri_res,
-                                                      obs.pixel);
-            if (err2 > chi2_2_5) {
-                ok = false;
-                break;
-            }
+            projs.push_back(cur_proj_mat);
+            pixels.push_back(obs.pixel);
         }
-        if (ok) {
-            local_map_.point_infos[index].observations.emplace_back(Rcw, tcw,
-                                                                    pixel);
-            // update map points from multiple observations
-            std::vector<cv::Mat> projs;
-            std::vector<cv::Point2f> pixels;
-            for (auto &obs : local_map_.point_infos[index].observations) {
-                cv::Mat cur_proj_mat = Geometry::get_proj_mat(
-                        camera_.get_intrinsic_mat(), obs.Rcw, obs.tcw);
-                projs.push_back(cur_proj_mat);
-                pixels.push_back(obs.pixel);
-            }
-            local_map_.point_infos[index].coord =
-                    Triangulator::triangulate(projs, pixels);
-        }
+        local_map_.point_infos[index].coord =
+                Triangulator::triangulate(projs, pixels);
     }
 }
 }// namespace vo_nono
