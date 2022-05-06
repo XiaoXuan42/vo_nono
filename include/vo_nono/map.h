@@ -77,8 +77,7 @@ public:
         frames_.push_back(frame);
     }
 
-    void insert_key_frame(const vo_ptr<Frame> &frame) {
-        log_debug_line("Switch keyframe: " << frame->get_id());
+    void insert_keyframe(const vo_ptr<Frame> &frame) {
         keyframes_.push_back(frame);
         b_global_ba_ = true;
         cv_global_ba_.notify_all();

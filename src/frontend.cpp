@@ -255,8 +255,6 @@ bool Frontend::tracking(const cv::Mat &image, double t) {
 
     log_debug_line("Track good: " << b_track_good_);
     log_debug_line("Match good: " << b_match_good_);
-    log_debug_line("Match " << cnt_inlier_direct_match_ << ". Project "
-                            << cnt_inlier_proj_match_);
     log_debug_line("Set " << curframe_->get_cnt_map_pt() << " points:\n"
                           << curframe_->get_Rcw() << std::endl
                           << curframe_->get_Tcw() << std::endl);
@@ -477,6 +475,23 @@ void Frontend::new_keyframe() {
         is_keyframe = true;
     }
     if (is_keyframe) {
+        // project from map to get more matches
+        vo_uptr<ORBMatcher> candidate_matcher = std::make_unique<ORBMatcher>(
+                ORBMatcher(candidate->get_keypoints(),
+                           candidate->get_descriptors(), camera_));
+        candidate_matcher->set_estimate_pose(candidate->get_Rcw(),
+                                             candidate->get_Tcw());
+        auto local_points = map_->get_local_map_points();
+        auto proj_matches =
+                candidate_matcher->match_by_projection(local_points, 2);
+        int proj_cnt = 0;
+        for (auto &proj_match : proj_matches) {
+            if (!candidate->is_index_set(proj_match.index)) {
+                candidate->set_map_pt(proj_match.index, proj_match.p_map_pt);
+                proj_cnt += 1;
+            }
+        }
+        log_debug_line("Projected " << proj_cnt << " map points.");
         log_debug_line("Switch keyframe: " << candidate->get_id() << " set "
                                            << candidate->get_cnt_map_pt()
                                            << " points.");
@@ -609,6 +624,7 @@ void Frontend::_set_keyframe(const vo_ptr<Frame> &keyframe) {
 
     local_map_.local_frames.push_back(keyframe);
     keyframe_ = keyframe;
+    map_->insert_keyframe(keyframe);
 }
 
 cv::Mat Frontend::_get_local_map_point_coord(int index) {
@@ -671,4 +687,5 @@ void Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
                 Triangulator::triangulate(projs, pixels);
     }
 }
+
 }// namespace vo_nono

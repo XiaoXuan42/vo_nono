@@ -68,8 +68,8 @@ public:
         assert(tcw.type() == CV_32F);
         assert(tcw.rows == 3);
         assert(tcw.cols == 1);
-        m_Rcw = Rcw;
-        m_tcw = tcw;
+        m_Rcw = Rcw.clone();
+        m_tcw = tcw.clone();
     }
 
 
