@@ -568,10 +568,19 @@ void Frontend::_associate_points(const std::vector<cv::DMatch> &matches,
         if (keyframe_->is_index_set(keyframe_index) &&
             !curframe_->is_index_set(curframe_index)) {
             auto pt = keyframe_->get_map_pt(keyframe_index);
-            double err2 = Geometry::reprojection_err2(
-                    proj_mat, pt->get_coord(),
-                    curframe_->get_pixel_pt(curframe_index));
-            if (err2 < chi2_2_5) { curframe_->set_map_pt(curframe_index, pt); }
+            cv::Mat pt_coord_cam = Geometry::transform_coord(
+                    curframe_->get_Rcw(), curframe_->get_Tcw(),
+                    pt->get_coord());
+            if (pt_coord_cam.at<float>(2) > 0) {
+                cv::Point2f proj_pixel = Geometry::hm2d_to_euclid2d(
+                        camera_.get_intrinsic_mat() * pt_coord_cam);
+                cv::Point2f diff =
+                        proj_pixel - curframe_->get_pixel_pt(curframe_index);
+                double err2 = diff.x * diff.x + diff.y * diff.y;
+                if (err2 < chi2_2_5) {
+                    curframe_->set_map_pt(curframe_index, pt);
+                }
+            }
         }
     }
 }
