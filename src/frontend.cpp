@@ -464,9 +464,7 @@ void Frontend::new_keyframe() {
     }
     if (!candidate || candidate == keyframe_) { return; }
 
-    if (direct_matches_.size() < 0.3 * keyframe_->feature_points.size()) {
-        is_keyframe = true;
-    } else if (curframe_->get_cnt_map_pt() < cnt_inlier_direct_match_) {
+    if (curframe_->get_cnt_map_pt() < cnt_inlier_direct_match_) {
         is_keyframe = true;
     } else if (curframe_->get_cnt_map_pt() <
                0.4 * keyframe_->get_cnt_map_pt()) {
@@ -491,6 +489,7 @@ void Frontend::new_keyframe() {
                 proj_cnt += 1;
             }
         }
+        // show_matches(keyframe_, candidate, proj_matches);
         log_debug_line("Projected " << proj_cnt << " map points.");
         log_debug_line("Switch keyframe: " << candidate->get_id() << " set "
                                            << candidate->get_cnt_map_pt()

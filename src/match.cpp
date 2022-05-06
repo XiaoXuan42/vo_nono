@@ -74,51 +74,24 @@ std::vector<ProjMatch> ORBMatcher::match_by_projection(
 
     cv::Mat proj_mat = Geometry::get_proj_mat(m_camera_intrinsic, m_Rcw, m_tcw);
     for (auto &map_pt : map_points) {
-        cv::Point2f proj_img_pt =
-                Geometry::project_euclid3d(proj_mat, map_pt->get_coord());
+        // in front of camera
+        cv::Mat coord_cam =
+                Geometry::transform_coord(m_Rcw, m_tcw, map_pt->get_coord());
+        if (coord_cam.at<float>(2) < 0) { continue; }
+
+        cv::Point2f proj_pixel =
+                Geometry::hm2d_to_euclid2d(m_camera_intrinsic * coord_cam);
+        if (proj_pixel.x < 0 || proj_pixel.x >= m_total_width ||
+            proj_pixel.y < 0 || proj_pixel.y >= m_total_height) {
+            continue;
+        }
+
         auto coord = cv::Matx31f(map_pt->get_coord());
-        if (proj_img_pt.x >= 0 && proj_img_pt.x < m_total_width &&
-            proj_img_pt.y >= 0 && proj_img_pt.y < m_total_height) {
-            int min_width_id =
-                    get_grid_width_id(std::max(0.0f, proj_img_pt.x - r_th));
-            int max_width_id = get_grid_width_id(
-                    std::min(m_total_width, proj_img_pt.x + r_th));
-            int min_height_id =
-                    get_grid_height_id(std::max(0.0f, proj_img_pt.y - r_th));
-            int max_height_id = get_grid_height_id(
-                    std::min(m_total_height, proj_img_pt.y + r_th));
-
-            int best_id = -1;
-            int best_dis = std::numeric_limits<int>::max();
-            for (int i = min_height_id; i <= max_height_id; ++i) {
-                for (int j = min_width_id; j <= max_width_id; ++j) {
-                    int min_pyramid_level =
-                            std::max(map_pt->get_pyramid_level() - 1, 0);
-                    int max_pyramid_level =
-                            std::min(map_pt->get_pyramid_level() + 1,
-                                     int(m_pyramid_grids.size()) - 1);
-                    for (int k = min_pyramid_level; k <= max_pyramid_level;
-                         ++k) {
-                        auto &level_grid = m_pyramid_grids[k];
-                        for (auto index : level_grid.grid[i][j]) {
-                            cv::KeyPoint kpt = kpts[index];
-                            if (std::fabs(kpt.pt.x - proj_img_pt.x) > r_th ||
-                                std::fabs(kpt.pt.y - proj_img_pt.y) > r_th) {
-                                continue;
-                            }
-                            int cur_dis = orb_distance(descriptors.row(index),
-                                                       map_pt->get_desc());
-                            if (cur_dis < best_dis) {
-                                best_id = index;
-                                best_dis = cur_dis;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (best_id < 0) { continue; }
-            if (best_dis > MAX_DESC_DIS) { continue; }
+        int best_id = match_in_rec(proj_pixel, map_pt->get_desc(), r_th,
+                                   map_pt->get_pyramid_level(), 0.8, 64);
+        if (best_id >= 0) {
+            int best_dis =
+                    orb_distance(map_pt->get_desc(), descriptors.row(best_id));
             if (book.count(best_id)) {
                 assert(book[best_id] < int(distances.size()));
                 if (distances[book[best_id]] < best_dis) { continue; }
