@@ -46,7 +46,7 @@ int ORBMatcher::match_in_rec(const cv::Point2f &pixel, const cv::Mat &dscpt,
                         continue;
                     }
                     int cur_dis = orb_distance(descriptors.row(index), dscpt);
-                    if (cur_dis < best_dis) {
+                    if (cur_dis <= best_dis) {
                         best_id = index;
                         second_dis = best_dis;
                         best_dis = cur_dis;

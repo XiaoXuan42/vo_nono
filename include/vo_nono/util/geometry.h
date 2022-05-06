@@ -52,6 +52,17 @@ public:
         return hm2d_to_euclid2d(res);
     }
 
+    // project but check whether the point is in front of the point(z-value is positive)
+    static bool project_euclid3d_in_front(const cv::Mat &cam_intrinsic,
+                                         const cv::Mat &Rcw, const cv::Mat &tcw,
+                                         const cv::Mat &coord,
+                                         cv::Point2f &pixel) {
+        cv::Mat coord_trans = Geometry::transform_coord(Rcw, tcw, coord);
+        if (coord_trans.at<float>(2) <= 0) { return false; }
+        pixel = Geometry::hm2d_to_euclid2d(cam_intrinsic * coord_trans);
+        return true;
+    }
+
     static double reprojection_err2(const cv::Mat &proj_mat,
                                     const cv::Mat &coord,
                                     const cv::Point2f &pixel) {

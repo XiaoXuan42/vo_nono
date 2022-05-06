@@ -86,13 +86,14 @@ private:
         map_->insert_frame(frame);
     }
     cv::Mat _get_local_map_point_coord(int index);
-    void _add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
+    bool _add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
                           const cv::Point2f &pixel, int index,
                           double tri_grad_th);
 
     // using matches with keyframe and optimize method to figure out pose
     std::vector<bool> _pose_from_match_by_optimize(
             const std::vector<cv::DMatch> &matches, cv::Mat &Rcw, cv::Mat &tcw);
+    std::vector<cv::DMatch> _match_keyframe_by_proj(float r_th);
 
 private:
     static constexpr int CNT_KEYPTS = 1000;

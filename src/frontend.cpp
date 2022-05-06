@@ -285,26 +285,9 @@ void Frontend::project_keyframe() {
     cv::Mat proj_mat =
             Geometry::get_proj_mat(camera_.get_intrinsic_mat(),
                                    curframe_->get_Rcw(), curframe_->get_Tcw());
-    std::vector<cv::DMatch> extended_matches;
-    std::vector<cv::DMatch> new_matches;
-    for (int i = 0; i < int(keyframe_->feature_points.size()); ++i) {
-        if (track_keyframe_curframe_.count(i)) {
-            extended_matches.emplace_back(i, track_keyframe_curframe_[i], 1);
-        } else if (keyframe_->is_index_set(i)) {
-            auto map_pt = keyframe_->get_map_pt(i);
-            auto pixel =
-                    Geometry::project_euclid3d(proj_mat, map_pt->get_coord());
-            if (camera_.inside_image(pixel)) {
-                int matched_index = matcher_->match_in_rec(
-                        pixel, map_pt->get_desc(), 2,
-                        map_pt->get_pyramid_level(), 0.8, 64);
-                if (matched_index >= 0 &&
-                    !track_curframe_keyframe_.count(matched_index)) {
-                    new_matches.emplace_back(i, matched_index, 1);
-                    extended_matches.emplace_back(i, matched_index, 1);
-                }
-            }
-        }
+    std::vector<cv::DMatch> extended_matches = _match_keyframe_by_proj(2);
+    for (auto &pair : track_keyframe_curframe_) {
+        extended_matches.emplace_back(pair.first, pair.second, 1.0);
     }
     cv::Mat Rcw = curframe_->get_Rcw().clone(),
             tcw = curframe_->get_Tcw().clone();
@@ -489,7 +472,6 @@ void Frontend::new_keyframe() {
                 proj_cnt += 1;
             }
         }
-        // show_matches(keyframe_, candidate, proj_matches);
         log_debug_line("Projected " << proj_cnt << " map points.");
         log_debug_line("Switch keyframe: " << candidate->get_id() << " set "
                                            << candidate->get_cnt_map_pt()
@@ -556,6 +538,8 @@ void Frontend::_update_points_location(const std::vector<cv::DMatch> &matches,
 
 void Frontend::_associate_points(const std::vector<cv::DMatch> &matches,
                                  int least_obs) {
+    track_keyframe_curframe_.clear();
+    track_curframe_keyframe_.clear();
     cv::Mat proj_mat =
             Geometry::get_proj_mat(camera_.get_intrinsic_mat(),
                                    curframe_->get_Rcw(), curframe_->get_Tcw());
@@ -593,10 +577,24 @@ void Frontend::_associate_points(const std::vector<cv::DMatch> &matches,
                 double err2 = diff.x * diff.x + diff.y * diff.y;
                 if (err2 < chi2_2_5) {
                     curframe_->set_map_pt(curframe_index, pt);
+                    track_keyframe_curframe_[keyframe_index] = curframe_index;
+                    track_curframe_keyframe_[curframe_index] = keyframe_index;
                 }
             }
         }
     }
+
+    // failed to associate enough points
+    // match from projection
+    //    if (curframe_->get_cnt_map_pt() < 0.4 * keyframe_->get_cnt_map_pt()) {
+    //        auto new_matches = _match_keyframe_by_proj(0.5);
+    //        for (auto &match : new_matches) {
+    //            assert(keyframe_->is_index_set(match.queryIdx));
+    //            assert(!curframe_->is_index_set(match.trainIdx));
+    //            curframe_->set_map_pt(match.trainIdx,
+    //                                  keyframe_->get_map_pt(match.queryIdx));
+    //        }
+    //    }
 }
 
 void Frontend::_set_keyframe(const vo_ptr<Frame> &keyframe) {
@@ -631,13 +629,13 @@ cv::Mat Frontend::_get_local_map_point_coord(int index) {
     return local_map_.point_infos[index].coord;
 }
 
-void Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
+bool Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
                                 const cv::Point2f &pixel, int index,
                                 double tri_grad_th) {
     if (local_map_.point_infos[index].observations.empty()) {
         local_map_.point_infos[index].observations.emplace_back(Rcw, tcw,
                                                                 pixel);
-        return;
+        return true;
     }
     cv::Mat proj_mat1 =
             Geometry::get_proj_mat(camera_.get_intrinsic_mat(),
@@ -685,6 +683,43 @@ void Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
         local_map_.point_infos[index].coord =
                 Triangulator::triangulate(projs, pixels);
     }
+    return ok;
 }
 
+std::vector<cv::DMatch> Frontend::_match_keyframe_by_proj(float r_th) {
+    std::vector<cv::DMatch> new_matches;
+    std::vector<bool> collision_mask;
+    std::unordered_map<int, int> matched_index_book;
+    for (int i = 0; i < int(keyframe_->feature_points.size()); ++i) {
+        if (keyframe_->is_index_set(i)) {
+            auto map_pt = keyframe_->get_map_pt(i);
+            cv::Point2f pixel;
+            if (!Geometry::project_euclid3d_in_front(
+                        camera_.get_intrinsic_mat(), curframe_->get_Rcw(),
+                        curframe_->get_Tcw(), map_pt->get_coord(), pixel)) {
+                continue;
+            }
+            if (camera_.inside_image(pixel)) {
+                int matched_index = matcher_->match_in_rec(
+                        pixel, map_pt->get_desc(), r_th,
+                        map_pt->get_pyramid_level(), 0.8, 64);
+                if (matched_index >= 0 &&
+                    !track_curframe_keyframe_.count(matched_index)) {
+                    assert(!curframe_->is_index_set(matched_index));
+                    if (!matched_index_book.count(matched_index)) {
+                        new_matches.emplace_back(i, matched_index, 1);
+                        matched_index_book[matched_index] =
+                                int(collision_mask.size());
+                        collision_mask.push_back(true);
+                    } else {
+                        collision_mask[matched_index_book[matched_index]] =
+                                false;
+                    }
+                }
+            }
+        }
+    }
+    new_matches = filter_by_mask(new_matches, collision_mask);
+    return new_matches;
+}
 }// namespace vo_nono
