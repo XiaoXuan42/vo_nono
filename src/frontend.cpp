@@ -50,7 +50,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
         keyframe_ = curframe_;
         b_succ = true;
     } else if (state_ == State::Initializing) {
-        int init_state = initialize(image);
+        int init_state = initialize();
         if (init_state == 0) {
             state_ = State::Tracking;
             map_->insert_frame(keyframe_);
@@ -75,7 +75,7 @@ void Frontend::get_image(const cv::Mat &image, double t) {
     }
 }
 
-int Frontend::initialize(const cv::Mat &image) {
+int Frontend::initialize() {
     keyframe_matches_ =
             matcher_->match_descriptor_bf(keyframe_->get_descriptors());
     init_matches_ = ORBMatcher::filter_match_by_dis(keyframe_matches_, 8, 32,
@@ -348,6 +348,7 @@ std::vector<bool> Frontend::track_by_match(
     cv::Mat Rcw = curframe_->get_Rcw(), tcw = curframe_->get_Tcw();
     PnP::pnp_ransac(pt_coords, img_pts, camera_, 100, ransac_th, Rcw, tcw,
                     inliers1);
+    assert(inliers1.size() == old_matches.size());
     for (int i = 0; i < (int) old_matches.size(); ++i) {
         if (inliers1[i] && !curframe_->is_index_set(old_matches[i].trainIdx)) {
             cnt_inlier += 1;

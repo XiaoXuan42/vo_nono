@@ -56,7 +56,7 @@ private:
         track_keyframe_curframe_.clear();
     }
 
-    int initialize(const cv::Mat &image);
+    int initialize();
     double _compute_ess_score(const cv::Mat &ess,
                               const std::vector<cv::DMatch> &matches);
     double _compute_h_score(const cv::Mat &H,

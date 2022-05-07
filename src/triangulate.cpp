@@ -47,7 +47,7 @@ cv::Mat Triangulator::triangulate(const std::vector<cv::Mat>& proj,
             weight[i] = new_w;
         }
         iter_cnt += 1;
-    } while (max_change > 0.1 && iter_cnt < 10);
+    } while (max_change > 0.1 && iter_cnt < 1);
     if (iter_cnt >= 10) {
         return Geometry::hm3d_to_euclid3d(old_res);
     } else {
