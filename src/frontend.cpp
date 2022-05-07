@@ -515,7 +515,7 @@ std::vector<cv::DMatch> Frontend::filter_match_cv(
         pt2.push_back(curframe_->get_pixel_pt(match.trainIdx));
     }
     std::vector<unsigned char> mask;
-    cv::findFundamentalMat(pt1, pt2, cv::FM_RANSAC, 100, 0.999, epi_th, mask);
+    cv::findFundamentalMat(pt1, pt2, cv::FM_RANSAC, epi_th, 0.999, 100, mask);
     return filter_by_mask(matches, mask);
 }
 
@@ -583,18 +583,6 @@ void Frontend::_associate_points(const std::vector<cv::DMatch> &matches,
             }
         }
     }
-
-    // failed to associate enough points
-    // match from projection
-    //    if (curframe_->get_cnt_map_pt() < 0.4 * keyframe_->get_cnt_map_pt()) {
-    //        auto new_matches = _match_keyframe_by_proj(0.5);
-    //        for (auto &match : new_matches) {
-    //            assert(keyframe_->is_index_set(match.queryIdx));
-    //            assert(!curframe_->is_index_set(match.trainIdx));
-    //            curframe_->set_map_pt(match.trainIdx,
-    //                                  keyframe_->get_map_pt(match.queryIdx));
-    //        }
-    //    }
 }
 
 void Frontend::_set_keyframe(const vo_ptr<Frame> &keyframe) {
