@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <opencv2/highgui.hpp>
 
 #include "tum.h"
 #include "vo_nono/config.h"
@@ -13,12 +14,23 @@
 #include <cstdio>
 #endif
 
-int main(int argc, const char *argv[]) {
-    if (argc < 3) { return 0; }
-#ifdef OUTPUT_REDIR
-    if (argc == 5) { freopen(argv[4], "w", stdout); }
-#endif
-    std::ifstream stream(argv[1]);
+void live_stream(const char *database_path) {
+    TumDataBase database(database_path);
+    int frame_id = 0;
+    while (!database.is_end()) {
+        cv::Mat img = database.cur_image_gray();
+        database.next();
+        std::string title = "live stream";
+        std::cerr << frame_id << std::endl;
+        cv::imshow(title, img);
+        cv::waitKey(100);
+        frame_id += 1;
+    }
+}
+
+int tum(const char *config_path, const char *database_path,
+        const char *traj_path, int max_frame) {
+    std::ifstream stream(config_path);
     std::stringstream sstream;
     if (!stream.is_open()) { return 0; }
     sstream << stream.rdbuf();
@@ -28,7 +40,7 @@ int main(int argc, const char *argv[]) {
             vo_nono::YamlConfig().generate_sysconf_from_str(yaml_config);
     vo_nono::System system = vo_nono::System(config);
 
-    TumDataBase database(argv[2]);
+    TumDataBase database(database_path);
     int frame_id = 0;
     while (!database.is_end()) {
         double cur_time = database.cur_time();
@@ -51,15 +63,28 @@ int main(int argc, const char *argv[]) {
                      "----"
                   << std::endl;
         frame_id += 1;
-        if (frame_id >= 130) { break; }
+        if (frame_id >= max_frame) { break; }
     }
 
-    if (argc >= 4) {
+    if (traj_path) {
         std::vector<std::pair<double, cv::Mat>> trajectory =
                 system.get_trajectory();
-        std::cout << "Save Trajectory to " << argv[3] << std::endl;
-        TumDataBase::trajectory_to_tum(trajectory, argv[3]);
+        std::cout << "Save Trajectory to " << traj_path << std::endl;
+        TumDataBase::trajectory_to_tum(trajectory, traj_path);
     }
+}
+
+int main(int argc, const char *argv[]) {
+    if (argc < 3) { return 0; }
+#ifdef OUTPUT_REDIR
+    if (argc == 5) { freopen(argv[4], "w", stdout); }
+#endif
+    const char *config_path = argv[1], *database_path = argv[2],
+               *traj_path = nullptr;
+    if (argc >= 4) { traj_path = argv[3]; }
+    tum(config_path, database_path, traj_path, 130);
+
+    //live_stream(argv[2]);
 #ifdef OUTPUT_REDIR
     if (argc >= 5) { fclose(stdout); }
 #endif
