@@ -73,9 +73,7 @@ public:
         if (t_global_ba_.joinable()) { t_global_ba_.join(); }
     }
 
-    void insert_frame(const vo_ptr<Frame> &frame) {
-        frames_.push_back(frame);
-    }
+    void insert_frame(const vo_ptr<Frame> &frame) { frames_.push_back(frame); }
 
     void insert_keyframe(const vo_ptr<Frame> &frame) {
         keyframes_.push_back(frame);

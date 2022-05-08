@@ -28,11 +28,11 @@ void live_stream(const char *database_path) {
     }
 }
 
-int tum(const char *config_path, const char *database_path,
-        const char *traj_path, int max_frame) {
+void tum(const char *config_path, const char *database_path,
+         const char *traj_path, int max_frame) {
     std::ifstream stream(config_path);
     std::stringstream sstream;
-    if (!stream.is_open()) { return 0; }
+    if (!stream.is_open()) { return; }
     sstream << stream.rdbuf();
 
     std::string yaml_config = sstream.str();

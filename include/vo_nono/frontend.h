@@ -65,9 +65,9 @@ private:
     void project_keyframe();
     void tracking_with_keyframe();
     void relocalization();
-    std::vector<bool> track_by_match(const vo_ptr<Frame> &ref_frame,
-                                     const std::vector<cv::DMatch> &matches,
-                                     float ransac_th);
+    std::vector<cv::DMatch> track_by_match(
+            const vo_ptr<Frame> &ref_frame,
+            const std::vector<cv::DMatch> &matches, float ransac_th);
     int track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
                             float r_th, float ransac_th);
     void new_keyframe();
@@ -94,6 +94,7 @@ private:
     std::vector<bool> _pose_from_match_by_optimize(
             const std::vector<cv::DMatch> &matches, cv::Mat &Rcw, cv::Mat &tcw);
     std::vector<cv::DMatch> _match_keyframe_by_proj(float r_th);
+    int _release_map_points(double th);
 
 private:
     static constexpr int CNT_KEYPTS = 1000;
@@ -142,6 +143,7 @@ private:
             std::vector<Observation> observations;
             cv::Mat coord;
             InvDepthFilter filter;
+            int type = 0;  // 0: filter or two view, 1: multiple view
         };
         std::vector<PointInfo> point_infos;
         std::vector<bool> own_points;

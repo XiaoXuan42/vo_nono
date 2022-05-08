@@ -270,15 +270,12 @@ void Frontend::tracking_with_keyframe() {
     direct_matches_ = ORBMatcher::filter_match_by_rotation_consistency(
             direct_matches_, keyframe_->get_keypoints(),
             curframe_->get_keypoints(), 3);
-    direct_match_inliers_ = track_by_match(keyframe_, direct_matches_, 6);
-    assert(direct_match_inliers_.size() == direct_matches_.size());
-    auto inlier_matches =
-            filter_by_mask(direct_matches_, direct_match_inliers_);
+    auto inlier_matches = track_by_match(keyframe_, direct_matches_, 6);
     for (auto &match : inlier_matches) {
         track_curframe_keyframe_[match.trainIdx] = match.queryIdx;
         track_keyframe_curframe_[match.queryIdx] = match.trainIdx;
     }
-    cnt_inlier_direct_match_ = cnt_inliers_from_mask(direct_match_inliers_);
+    cnt_inlier_direct_match_ = int(inlier_matches.size());
 }
 
 void Frontend::project_keyframe() {
@@ -320,56 +317,61 @@ void Frontend::relocalization() {
     // case1: not enough (true) matches between keyframe and curframe.
 }
 
-std::vector<bool> Frontend::track_by_match(
+std::vector<cv::DMatch> Frontend::track_by_match(
         const vo_ptr<Frame> &ref_frame, const std::vector<cv::DMatch> &matches,
         float ransac_th) {
     std::vector<cv::Matx31f> pt_coords;
     std::vector<cv::Point2f> img_pts;
     std::vector<cv::DMatch> old_matches;
     std::vector<bool> inliers1, inliers2;
-    std::vector<bool> cur_mask;
 
-    for (int i = 0; i < int(matches.size()); ++i) {
-        if (ref_frame->is_index_set(matches[i].queryIdx)) {
-            old_matches.push_back(matches[i]);
-            pt_coords.push_back(
-                    ref_frame->get_map_pt(matches[i].queryIdx)->get_coord());
-            img_pts.push_back(curframe_->get_pixel_pt(matches[i].trainIdx));
-            cur_mask.push_back(true);
-        } else {
-            cur_mask.push_back(false);
+    for (auto &match : matches) {
+        if (ref_frame->is_index_set(match.queryIdx)) {
+            old_matches.push_back(match);
         }
     }
-    if (old_matches.size() < 10) { return cur_mask; }
+    if (old_matches.size() < 100) {
+        if (keyframe_->get_cnt_map_pt() < 200) { _release_map_points(0.1); }
+        for (auto &match : old_matches) {
+            track_keyframe_curframe_[match.queryIdx] = match.trainIdx;
+            track_curframe_keyframe_[match.trainIdx] = match.queryIdx;
+        }
+        auto extended_matches = _match_keyframe_by_proj(3);
+        old_matches.insert(old_matches.end(), extended_matches.begin(),
+                           extended_matches.end());
+        track_keyframe_curframe_.clear();
+        track_curframe_keyframe_.clear();
+    }
+    if (old_matches.size() < 10) { return std::vector<cv::DMatch>(); }
+    for (auto &match : old_matches) {
+        pt_coords.push_back(ref_frame->get_map_pt(match.queryIdx)->get_coord());
+        img_pts.push_back(curframe_->get_pixel_pt(match.trainIdx));
+    }
 
     log_debug_line("Total match: " << matches.size());
     log_debug_line("Old match: " << old_matches.size());
-    int cnt_inlier = 0;
     cv::Mat Rcw = curframe_->get_Rcw(), tcw = curframe_->get_Tcw();
     PnP::pnp_ransac(pt_coords, img_pts, camera_, 100, ransac_th, Rcw, tcw,
                     inliers1);
     assert(inliers1.size() == old_matches.size());
     for (int i = 0; i < (int) old_matches.size(); ++i) {
-        if (inliers1[i] && !curframe_->is_index_set(old_matches[i].trainIdx)) {
-            cnt_inlier += 1;
-        } else {
+        if (curframe_->is_index_set(old_matches[i].trainIdx)) {
             inliers1[i] = false;
         }
     }
-    cur_mask = mask_chaining(cur_mask, inliers1);
-    if (cnt_inlier < 10) { return cur_mask; }
-
     old_matches = filter_by_mask(old_matches, inliers1);
-    log_debug_line("Old match after pnp: " << old_matches.size());
     pt_coords = filter_by_mask(pt_coords, inliers1);
     img_pts = filter_by_mask(img_pts, inliers1);
+    if (old_matches.size() < 10) { return old_matches; }
+
+    log_debug_line("Old match after pnp: " << old_matches.size());
     inliers2 = PnP::pnp_by_optimize(pt_coords, img_pts, camera_, Rcw, tcw);
     curframe_->set_Rcw(Rcw);
     curframe_->set_Tcw(tcw);
-    log_debug_line("Match after optimize: " << cnt_inliers_from_mask(inliers2));
-    cur_mask = mask_chaining(cur_mask, inliers2);
-    assert(cnt_inliers_from_mask(cur_mask) == cnt_inliers_from_mask(inliers2));
-    return cur_mask;
+
+    old_matches = filter_by_mask(old_matches, inliers2);
+    log_debug_line("Match after optimize: " << old_matches.size());
+    return old_matches;
 }
 
 int Frontend::track_by_projection(const std::vector<vo_ptr<MapPoint>> &points,
@@ -448,7 +450,7 @@ void Frontend::new_keyframe() {
     }
     if (!candidate || candidate == keyframe_) { return; }
 
-    if (curframe_->get_cnt_map_pt() < cnt_inlier_direct_match_) {
+    if (keyframe_matches_.size() < 300) {
         is_keyframe = true;
     } else if (curframe_->get_cnt_map_pt() <
                0.4 * keyframe_->get_cnt_map_pt()) {
@@ -621,6 +623,7 @@ cv::Mat Frontend::_get_local_map_point_coord(int index) {
 bool Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
                                 const cv::Point2f &pixel, int index,
                                 double tri_grad_th) {
+    assert(local_map_.own_points[index]);
     if (local_map_.point_infos[index].observations.empty()) {
         local_map_.point_infos[index].observations.emplace_back(Rcw, tcw,
                                                                 pixel);
@@ -634,19 +637,11 @@ bool Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
     cv::Mat tri_res = Triangulator::triangulate(
             proj_mat1, proj_mat2, keyframe_->get_pixel_pt(index), pixel);
 
-    local_map_.point_infos[index].filter.filter(keyframe_->get_Tcw(),
-                                                keyframe_->get_Rcw(),
-                                                curframe_->get_Tcw(), tri_res);
-
     bool ok = true;
-    for (auto &obs : local_map_.point_infos[index].observations) {
-        // parallax test
-        if (!Triangulator::is_triangulate_inlier(obs.Rcw, obs.tcw, Rcw, tcw,
-                                                 tri_res, tri_grad_th)) {
-            ok = false;
-            break;
-        }
-        // reprojection error test
+    auto &point_info = local_map_.point_infos[index];
+    auto &filter = point_info.filter;
+    // reprojection error test
+    for (auto &obs : point_info.observations) {
         cv::Mat cur_proj_mat = Geometry::get_proj_mat(
                 camera_.get_intrinsic_mat(), obs.Rcw, obs.tcw);
         double err2 =
@@ -656,22 +651,77 @@ bool Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
             break;
         }
     }
-    // update state
     if (ok) {
-        local_map_.point_infos[index].observations.emplace_back(Rcw, tcw,
-                                                                pixel);
-        // update map points from multiple observations
-        std::vector<cv::Mat> projs;
-        std::vector<cv::Point2f> pixels;
-        for (auto &obs : local_map_.point_infos[index].observations) {
-            cv::Mat cur_proj_mat = Geometry::get_proj_mat(
-                    camera_.get_intrinsic_mat(), obs.Rcw, obs.tcw);
-            projs.push_back(cur_proj_mat);
-            pixels.push_back(obs.pixel);
+        filter.filter(keyframe_->get_Tcw(), keyframe_->get_Rcw(),
+                      curframe_->get_Tcw(), tri_res);
+
+        bool new_obs = true;
+        for (auto &obs : point_info.observations) {
+            // parallax test
+            if (!Triangulator::is_triangulate_inlier(obs.Rcw, obs.tcw, Rcw, tcw,
+                                                     tri_res, tri_grad_th)) {
+                new_obs = false;
+                break;
+            }
         }
-        local_map_.point_infos[index].coord =
-                Triangulator::triangulate(projs, pixels);
+
+        // 0: cur 1: filter 2: original 3: triangulate
+        bool valid[4] = {true, true, false, false};
+        double err2[4] = {0.0, 0.0, std::numeric_limits<double>::max(),
+                          std::numeric_limits<double>::max()};
+        cv::Mat coords[4] = {
+                tri_res,
+                filter.get_coord(keyframe_->get_Tcw(), keyframe_->get_Rcw()),
+                cv::Mat(), cv::Mat()};
+
+        if (new_obs) {
+            point_info.observations.emplace_back(Rcw, tcw, pixel);
+            // coord from multiple observations
+            std::vector<cv::Mat> projs;
+            std::vector<cv::Point2f> pixels;
+            for (auto &obs : point_info.observations) {
+                cv::Mat cur_proj_mat = Geometry::get_proj_mat(
+                        camera_.get_intrinsic_mat(), obs.Rcw, obs.tcw);
+                projs.push_back(cur_proj_mat);
+                pixels.push_back(obs.pixel);
+            }
+            valid[3] = true;
+            coords[3] = Triangulator::triangulate(projs, pixels);
+            err2[3] = 0.0;
+        }
+        if (point_info.coord.rows == 3) {
+            assert(point_info.coord.cols == 1);
+            valid[2] = true;
+            coords[2] = point_info.coord;
+            err2[2] = 0.0;
+        }
+
+        // select the most "accurate" point
+        for (auto &obs : point_info.observations) {
+            cv::Mat proj_mat = Geometry::get_proj_mat(
+                    camera_.get_intrinsic_mat(), obs.Rcw, obs.tcw);
+            for (int j = 0; j < 4; ++j) {
+                if (valid[j]) {
+                    err2[j] += Geometry::reprojection_err2(proj_mat, coords[j],
+                                                           obs.pixel);
+                }
+            }
+        }
+        int best_idx = 0;
+        double best_err2 = err2[0];
+        for (int j = 1; j < 4; ++j) {
+            if (valid[j] && err2[j] < best_err2) { best_idx = j; }
+        }
+
+        assert(valid[best_idx]);
+        point_info.coord = coords[best_idx];
+        if (best_idx == 0 || best_idx == 1) {
+            point_info.type = 0;
+        } else if (best_idx == 3) {
+            point_info.type = 1;
+        }
     }
+
     return ok;
 }
 
@@ -680,7 +730,7 @@ std::vector<cv::DMatch> Frontend::_match_keyframe_by_proj(float r_th) {
     std::vector<bool> collision_mask;
     std::unordered_map<int, int> matched_index_book;
     for (int i = 0; i < int(keyframe_->feature_points.size()); ++i) {
-        if (keyframe_->is_index_set(i)) {
+        if (keyframe_->is_index_set(i) && !track_keyframe_curframe_.count(i)) {
             auto map_pt = keyframe_->get_map_pt(i);
             cv::Point2f pixel;
             if (!Geometry::project_euclid3d_in_front(
@@ -710,5 +760,33 @@ std::vector<cv::DMatch> Frontend::_match_keyframe_by_proj(float r_th) {
     }
     new_matches = filter_by_mask(new_matches, collision_mask);
     return new_matches;
+}
+
+int Frontend::_release_map_points(double th) {
+    int released_cnt = 0;
+    for (int i = 0; i < (int) local_map_.point_infos.size(); ++i) {
+        if (local_map_.own_points[i]) {
+            auto &point_info = local_map_.point_infos[i];
+            auto &filter = local_map_.point_infos[i].filter;
+            bool is_release = false;
+            if (point_info.type == 0) {
+                if (filter.relative_error_less(th)) { is_release = true; }
+            } else {
+                is_release = true;
+            }
+            if (is_release) {
+                assert(point_info.coord.rows == 3);
+                auto new_pt =
+                        std::make_shared<MapPoint>(MapPoint::create_map_point(
+                                point_info.coord.clone(),
+                                keyframe_->feature_points[i]->descriptor,
+                                keyframe_->feature_points[i]->keypoint.octave));
+                new_pt->associate_feature_point(keyframe_->feature_points[i]);
+                keyframe_->set_map_pt(i, new_pt);
+                released_cnt += 1;
+            }
+        }
+    }
+    return released_cnt;
 }
 }// namespace vo_nono
