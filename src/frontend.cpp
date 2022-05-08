@@ -484,6 +484,47 @@ void Frontend::new_keyframe() {
 }
 
 bool Frontend::triangulate_and_set(const std::vector<cv::DMatch> &matches) {
+    auto check_matches = filter_match(matches, 6);
+    if (check_matches.size() < 0.4 * matches.size()) {
+        std::cerr << curframe_->get_id() << " " << matches.size() << " "
+                  << check_matches.size() << std::endl;
+        std::vector<cv::Point2f> pt1, pt2;
+        for (auto &match : matches) {
+            pt1.push_back(keyframe_->get_pixel_pt(match.queryIdx));
+            pt2.push_back(curframe_->get_pixel_pt(match.trainIdx));
+        }
+        std::vector<unsigned char> mask_ess;
+        cv::Mat ess =
+                cv::findEssentialMat(pt1, pt2, camera_.get_intrinsic_mat(),
+                                     cv::RANSAC, 0.999, 2.0, 1000, mask_ess);
+        auto ess_matches = filter_by_mask(matches, mask_ess);
+        std::vector<cv::DMatch> ess_old_matches;
+        for (auto &match : ess_matches) {
+            if (keyframe_->is_index_set(match.queryIdx)) {
+                ess_old_matches.push_back(match);
+            }
+        }
+        cv::Mat Rcw, tcw;
+        pt1 = filter_by_mask(pt1, mask_ess);
+        pt2 = filter_by_mask(pt2, mask_ess);
+        cv::recoverPose(ess, pt1, pt2, camera_.get_intrinsic_mat(), Rcw, tcw);
+        Rcw.convertTo(Rcw, CV_32F);
+        tcw.convertTo(tcw, CV_32F);
+        Rcw = Rcw * keyframe_->get_Rcw();
+        tcw = tcw * cv::norm(curframe_->get_Tcw() - keyframe_->get_Tcw()) +
+              keyframe_->get_Tcw();
+        //tcw = curframe_->get_Tcw();
+//        auto optim_mask =
+//                _pose_from_match_by_optimize(ess_old_matches, Rcw, tcw);
+//        std::cerr << "optimize " << ess_old_matches.size() << " remaining "
+//                  << cnt_inliers_from_mask(optim_mask) << " inliers"
+//                  << std::endl;
+        curframe_->set_Rcw(Rcw);
+        curframe_->set_Tcw(tcw);
+        check_matches = filter_match(matches, 6);
+        std::cerr << curframe_->get_id() << "fixed: " << matches.size() << " "
+                  << check_matches.size() << std::endl;
+    }
     std::vector<cv::DMatch> valid_matches = filter_match_cv(matches, 6);
     _update_points_location(valid_matches, 1000);
     _associate_points(valid_matches, 3);
@@ -664,6 +705,7 @@ bool Frontend::_add_observation(const cv::Mat &Rcw, const cv::Mat &tcw,
                 break;
             }
         }
+        new_obs = true;
 
         // 0: cur 1: filter 2: original 3: triangulate
         bool valid[4] = {true, true, false, false};
